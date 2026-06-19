@@ -160,43 +160,12 @@ SCRIPT
 }
 
 write_test_script() {
-  log "Writing test script: $INSTALL_DIR/test-semi-agent.sh"
-  cat > "$INSTALL_DIR/test-semi-agent.sh" <<'SCRIPT'
-#!/usr/bin/env bash
-set -euo pipefail
-cd "$(dirname "$0")"
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-uv run python run_semi.py --force
-SCRIPT
+  log "Enabling test script: $INSTALL_DIR/test-semi-agent.sh"
   chmod +x "$INSTALL_DIR/test-semi-agent.sh"
 }
 
 write_clear_cache_script() {
-  log "Writing cache reset script: $INSTALL_DIR/clear-semi-cache.sh"
-  cat > "$INSTALL_DIR/clear-semi-cache.sh" <<'SCRIPT'
-#!/usr/bin/env bash
-set -euo pipefail
-cd "$(dirname "$0")"
-STATE_FILE="data/semi_state.json"
-CACHE_DIR="data/cache"
-mkdir -p data logs "$CACHE_DIR"
-cat > "$STATE_FILE" <<'JSON'
-{
-  "sent_alerts": {},
-  "daily_alerts": {},
-  "trending_watchlist": [],
-  "symbol_baselines": {},
-  "symbol_theses": {},
-  "last_scan": null
-}
-JSON
-rm -rf "${CACHE_DIR:?}/"*
-printf 'Cleared semi agent cache:\n'
-printf '  - %s\n' "$STATE_FILE"
-printf '  - %s/*\n' "$CACHE_DIR"
-printf '\nRun a test scan:\n'
-printf '  %s/test-semi-agent.sh\n' "$(pwd)"
-SCRIPT
+  log "Enabling cache reset script: $INSTALL_DIR/clear-semi-cache.sh"
   chmod +x "$INSTALL_DIR/clear-semi-cache.sh"
 }
 

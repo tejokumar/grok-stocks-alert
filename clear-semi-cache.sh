@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# Reset semiconductor agent state and file cache.
-# Does NOT touch .env or API keys.
+# Reset TEST-ONLY semiconductor agent state and cache.
+# Live production state (data/semi_state.json) is never modified.
 #
 # Usage:
 #   ./clear-semi-cache.sh
-#   ~/projects/grok-stocks-alert/clear-semi-cache.sh
 
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
-STATE_FILE="data/semi_state.json"
-CACHE_DIR="data/cache"
+TEST_STATE_FILE="data/test/semi_state.json"
+TEST_CACHE_DIR="data/test/cache"
+LIVE_STATE_FILE="data/semi_state.json"
 
-mkdir -p data logs "$CACHE_DIR"
+mkdir -p data/test "$TEST_CACHE_DIR"
 
-cat > "$STATE_FILE" <<'JSON'
+cat > "$TEST_STATE_FILE" <<'JSON'
 {
   "sent_alerts": {},
   "daily_alerts": {},
@@ -26,12 +26,14 @@ cat > "$STATE_FILE" <<'JSON'
 }
 JSON
 
-if [[ -d "$CACHE_DIR" ]]; then
-  rm -rf "${CACHE_DIR:?}/"*
+if [[ -d "$TEST_CACHE_DIR" ]]; then
+  rm -rf "${TEST_CACHE_DIR:?}/"*
 fi
 
-printf 'Cleared semi agent cache:\n'
-printf '  - %s\n' "$STATE_FILE"
-printf '  - %s/*\n' "$CACHE_DIR"
+printf 'Cleared TEST cache only:\n'
+printf '  - %s\n' "$TEST_STATE_FILE"
+printf '  - %s/*\n' "$TEST_CACHE_DIR"
+printf '\nLive agent untouched:\n'
+printf '  - %s\n' "$LIVE_STATE_FILE"
 printf '\nRun a test scan:\n'
 printf '  %s/test-semi-agent.sh\n' "$(pwd)"

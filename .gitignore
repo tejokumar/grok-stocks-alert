@@ -45,6 +45,8 @@ logs/
 data/cache/
 data/state.json
 data/semi_state.json
+data/test/*
+!data/test/.gitkeep
 
 # OS
 .DS_Store
