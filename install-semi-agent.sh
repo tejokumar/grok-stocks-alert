@@ -8,7 +8,7 @@
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/tejokumar/grok-stocks-alert.git}"
-INSTALL_DIR="${INSTALL_DIR:-$HOME/grok-stocks-alert}"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/projects/grok-stocks-alert}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 INSTALL_LAUNCH_AGENT="${INSTALL_LAUNCH_AGENT:-yes}"
 
@@ -41,6 +41,7 @@ clone_or_update_repo() {
     die "$INSTALL_DIR exists but is not a git repo. Set INSTALL_DIR to another path."
   fi
 
+  mkdir -p "$(dirname "$INSTALL_DIR")"
   log "Cloning $REPO_URL into $INSTALL_DIR"
   git clone "$REPO_URL" "$INSTALL_DIR"
   git -C "$INSTALL_DIR" checkout main
@@ -197,7 +198,7 @@ LaunchAgent controls:
    launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.tejokumar.grok-semi-alerts.plist  # start
 
 Optional env overrides for install:
-   INSTALL_DIR=~/projects/grok-stocks-alert ./install-semi-agent.sh
+   INSTALL_DIR=~/other/path/grok-stocks-alert ./install-semi-agent.sh
    INSTALL_LAUNCH_AGENT=no ./install-semi-agent.sh
 
 ============================================================

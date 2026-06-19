@@ -138,7 +138,7 @@ curl -fsSL https://raw.githubusercontent.com/tejokumar/grok-stocks-alert/main/in
 
 ### What the installer does
 
-1. Clones the repo to `~/grok-stocks-alert` (or `INSTALL_DIR`)
+1. Clones the repo to `~/projects/grok-stocks-alert` (or `INSTALL_DIR`)
 2. Creates Python 3.11+ virtual environment
 3. Installs dependencies from `requirements.txt`
 4. Copies `.env.example` → `.env`
@@ -150,13 +150,13 @@ curl -fsSL https://raw.githubusercontent.com/tejokumar/grok-stocks-alert/main/in
 
 ```bash
 # 1. Add API keys
-nano ~/grok-stocks-alert/.env
+nano ~/projects/grok-stocks-alert/.env
 
 # 2. Test one scan immediately
-~/grok-stocks-alert/test-semi-agent.sh
+~/projects/grok-stocks-alert/test-semi-agent.sh
 
 # 3. Run during market hours (waits until 9:15 AM ET)
-~/grok-stocks-alert/start-semi-agent.sh
+~/projects/grok-stocks-alert/start-semi-agent.sh
 ```
 
 ### LaunchAgent controls
@@ -176,7 +176,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tejokumar.grok-semi-
 
 ```bash
 # Custom install path
-INSTALL_DIR=~/projects/grok-stocks-alert ./install-semi-agent.sh
+INSTALL_DIR=~/other/path/grok-stocks-alert ./install-semi-agent.sh
 
 # Skip auto-start on login (manual run only)
 INSTALL_LAUNCH_AGENT=no ./install-semi-agent.sh
@@ -186,9 +186,9 @@ INSTALL_LAUNCH_AGENT=no ./install-semi-agent.sh
 
 | File | Purpose |
 |------|---------|
-| `~/grok-stocks-alert/logs/semi_agent.log` | Agent scan logs |
-| `~/grok-stocks-alert/logs/launchd.stdout.log` | LaunchAgent stdout |
-| `~/grok-stocks-alert/logs/launchd.stderr.log` | LaunchAgent errors |
+| `~/projects/grok-stocks-alert/logs/semi_agent.log` | Agent scan logs |
+| `~/projects/grok-stocks-alert/logs/launchd.stdout.log` | LaunchAgent stdout |
+| `~/projects/grok-stocks-alert/logs/launchd.stderr.log` | LaunchAgent errors |
 
 Copy your `.env` from another machine to the Mac mini before testing — the installer does not include API keys.
 
