@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     thesis_reversal_lookback_days: int = 7
     xai_model: str = "grok-4.3"
     xai_reasoning_effort: str = "none"
+    xai_max_symbols: int = 6
+    xai_max_workers: int = 4
     claude_model: str = "claude-sonnet-4-20250514"
 
     market_timezone: str = "America/New_York"

@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from src.ai import ClaudeClient, XAIClient
 from src.alerts import TelegramAlerter
@@ -67,7 +68,7 @@ class StockAlertAgent:
         catalyst_alerts = self.catalyst.find_strong_catalyst_alerts(
             symbols, watchlist_by_symbol, phase=phase,
         )
-        catalyst_alerts.extend(self._xai_catalyst_alerts(symbols[:12], phase))
+        catalyst_alerts.extend(self._xai_catalyst_alerts(symbols, phase))
 
         grade_upgrades, grade_downgrades = self.analyst_grades.scan_symbols(
             symbols, watchlist_by_symbol,
@@ -161,22 +162,65 @@ class StockAlertAgent:
         if not self.settings.enable_xai_catalyst_search:
             return []
 
+        scan_symbols = symbols[: self.settings.xai_max_symbols]
+        if not scan_symbols:
+            return []
+
+        workers = min(self.settings.xai_max_workers, len(scan_symbols))
+        logger.info(
+            "xAI catalyst scan: %d symbols (%s), %d workers",
+            len(scan_symbols), ", ".join(scan_symbols), workers,
+        )
+
         alerts: list[Alert] = []
-        for symbol in symbols:
-            context_lines, news_refs = self._collect_news_references(symbol)
-            insight = self.xai.analyze_catalysts(symbol, "\n".join(context_lines))
-            if not insight:
-                continue
-            xai_alerts = self.xai.to_alerts(insight)
-            for alert in xai_alerts:
-                if phase == "premarket":
-                    alert.alert_type = AlertType.PREMARKET
-                self._merge_alert_references(alert, news_refs, insight.references)
-                alert.metadata["catalyst_key"] = catalyst_dedup_key(
-                    symbol, insight.summary or alert.title, "xai",
-                )
-                if alert.confidence >= self.settings.min_catalyst_confidence:
-                    alerts.append(alert)
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(self._xai_scan_symbol, symbol, phase): symbol
+                for symbol in scan_symbols
+            }
+            for future in as_completed(futures):
+                symbol = futures[future]
+                try:
+                    alerts.extend(future.result())
+                except Exception as exc:
+                    logger.warning("xAI scan failed for %s: %s", symbol, exc)
+        return alerts
+
+    def _xai_scan_symbol(self, symbol: str, phase: str) -> list[Alert]:
+        context_lines, news_refs = self._collect_news_references(symbol)
+        return self._xai_alerts_from_context(symbol, phase, context_lines, news_refs)
+
+    def _xai_alerts_from_context(
+        self,
+        symbol: str,
+        phase: str,
+        context_lines: list[str],
+        news_refs: list[dict[str, str]],
+        *,
+        catalyst_key_prefix: str = "",
+        alert_title_prefix: str = "",
+        extra_metadata: dict | None = None,
+    ) -> list[Alert]:
+        insight = self.xai.analyze_catalysts(symbol, "\n".join(context_lines))
+        if not insight:
+            return []
+
+        alerts: list[Alert] = []
+        for alert in self.xai.to_alerts(insight):
+            if phase == "premarket":
+                alert.alert_type = AlertType.PREMARKET
+            if alert_title_prefix:
+                alert.title = f"{alert_title_prefix}{alert.title}"
+            if extra_metadata:
+                alert.metadata.update(extra_metadata)
+            self._merge_alert_references(alert, news_refs, insight.references)
+            alert.metadata["catalyst_key"] = catalyst_dedup_key(
+                f"{catalyst_key_prefix}{symbol}",
+                insight.summary or alert.title,
+                "xai",
+            )
+            if alert.confidence >= self.settings.min_catalyst_confidence:
+                alerts.append(alert)
         return alerts
 
     def _enrich_with_price(

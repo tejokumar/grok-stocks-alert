@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import time
 
 from src.config import Settings
 from src.models import Alert, AlertType, CatalystInsight
@@ -49,6 +50,7 @@ class XAIClient:
         if context:
             prompt += f"\n\nAdditional context:\n{context}"
 
+        started = time.monotonic()
         try:
             response = self.http.post(
                 "/responses",
@@ -86,6 +88,11 @@ class XAIClient:
                 return None
 
             references = self._build_references(parsed, response.get("citations") or [])
+            elapsed = time.monotonic() - started
+            logger.info(
+                "xAI catalyst scan for %s completed in %.1fs (%d citations)",
+                symbol, elapsed, len(references),
+            )
             return CatalystInsight(
                 symbol=symbol,
                 catalysts=parsed.get("catalysts", []),

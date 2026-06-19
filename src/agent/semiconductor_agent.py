@@ -1,7 +1,6 @@
 import logging
 
 from src.agent.stock_agent import StockAlertAgent
-from src.ai.xai_client import XAIClient
 from src.analysis import BreakoutAnalyzer, ConvictionSelector, DirectionAnalyzer
 from src.analysis.semiconductor_trending import SemiconductorTrendingAnalyzer
 from src.config import Settings, get_settings
@@ -9,8 +8,6 @@ from src.data import FMPClient, PolygonClient, ROICClient
 from src.models import Alert, AlertType
 from src.semiconductor.catalyst import SemiconductorCatalystAnalyzer
 from src.semiconductor.universe import SemiconductorUniverse
-from src.utils.dedup import catalyst_dedup_key
-
 logger = logging.getLogger(__name__)
 
 SEMI_XAI_CONTEXT = (
@@ -49,31 +46,23 @@ class SemiconductorAlertAgent(StockAlertAgent):
             return []
 
         semi_symbols = [s for s in symbols if self.universe.is_semiconductor(s)]
-        alerts: list[Alert] = []
-        for symbol in semi_symbols:
-            context_parts = [SEMI_XAI_CONTEXT]
-            news_lines, news_refs = self._collect_news_references(symbol)
-            context_parts.extend(news_lines)
-            cat = self.universe.get_category(symbol)
-            context_parts.append(f"Category: {cat} ({self.universe.get_name(symbol)})")
+        return super()._xai_catalyst_alerts(semi_symbols, phase)
 
-            insight = self.xai.analyze_catalysts(symbol, "\n".join(context_parts))
-            if not insight:
-                continue
-            xai_alerts = self.xai.to_alerts(insight)
-            for alert in xai_alerts:
-                if phase == "premarket":
-                    alert.alert_type = AlertType.PREMARKET
-                cat_label = self.universe.get_category(symbol)
-                alert.title = f"[{cat_label.upper()}] {alert.title}"
-                alert.metadata["semi_category"] = cat_label
-                self._merge_alert_references(alert, news_refs, insight.references)
-                alert.metadata["catalyst_key"] = catalyst_dedup_key(
-                    f"semi:{symbol}", insight.summary or alert.title, "xai",
-                )
-                if alert.confidence >= self.settings.min_catalyst_confidence:
-                    alerts.append(alert)
-        return alerts
+    def _xai_scan_symbol(self, symbol: str, phase: str) -> list[Alert]:
+        context_parts = [SEMI_XAI_CONTEXT]
+        news_lines, news_refs = self._collect_news_references(symbol)
+        context_parts.extend(news_lines)
+        cat = self.universe.get_category(symbol)
+        context_parts.append(f"Category: {cat} ({self.universe.get_name(symbol)})")
+        return self._xai_alerts_from_context(
+            symbol,
+            phase,
+            context_parts,
+            news_refs,
+            catalyst_key_prefix="semi:",
+            alert_title_prefix=f"[{cat.upper()}] ",
+            extra_metadata={"semi_category": cat},
+        )
 
     def send_startup_message(self) -> None:
         now = self.calendar.now()
