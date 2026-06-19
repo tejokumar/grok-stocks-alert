@@ -136,7 +136,31 @@ python run_semi.py &
 
 Use the one-command installer to clone, set up, and register a LaunchAgent for auto-start on login.
 
-### One-line install
+### One-line install (recommended — new URL avoids CDN cache)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tejokumar/grok-stocks-alert/main/mac-mini-setup.sh | bash
+```
+
+You should see `4.0.0-uv` in the first line of output. If you see `Python 3.11+ required`, your Mac is running a **cached old installer** — use the command above or the inline setup below.
+
+### Inline setup (no script download — paste into Terminal)
+
+```bash
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+D=~/projects/grok-stocks-alert
+mkdir -p "$(dirname "$D")"
+[ -d "$D/.git" ] && git -C "$D" pull --ff-only origin main || git clone https://github.com/tejokumar/grok-stocks-alert.git "$D"
+cd "$D" && uv python install 3.12 && uv sync
+[ -f .env ] || cp .env.example .env
+printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' 'cd "$(dirname "$0")"' 'export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"' 'uv run python run_semi.py --force' > test-semi-agent.sh
+chmod +x test-semi-agent.sh
+echo "OK — add keys: nano $D/.env  then run: $D/test-semi-agent.sh"
+```
+
+### Full install (LaunchAgent + start scripts)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tejokumar/grok-stocks-alert/main/install-semi-agent.sh | bash

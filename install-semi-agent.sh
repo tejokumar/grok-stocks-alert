@@ -7,10 +7,27 @@
 # Or after cloning:
 #   cd grok-stocks-alert && ./install-semi-agent.sh
 
-INSTALLER_VERSION="3.0.0-uv"
+INSTALLER_VERSION="4.0.0-uv"
 printf '\n[install] grok-semi-agent installer %s\n' "$INSTALLER_VERSION"
+printf '[install] If you do NOT see "%s" above, your Mac is running a cached old installer.\n' "$INSTALLER_VERSION"
+printf '[install] Use the inline setup in README or: curl -fsSL ".../mac-mini-setup.sh" | bash\n'
 
 set -euo pipefail
+
+# Re-exec after git pull when someone runs a stale copy from an old clone.
+if [[ -n "${BASH_SOURCE[0]:-}" ]] && [[ "${BASH_SOURCE[0]}" != bash ]] && [[ -f "${BASH_SOURCE[0]}" ]]; then
+  _script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+  if grep -q 'PYTHON_BIN\|Python 3\.11+ required' "$_script_path" 2>/dev/null; then
+    _repo_dir="$(dirname "$_script_path")"
+    if [[ -d "$_repo_dir/.git" ]]; then
+      printf '\n[install] Stale installer detected — pulling latest from GitHub...\n'
+      git -C "$_repo_dir" fetch origin main
+      git -C "$_repo_dir" checkout main
+      git -C "$_repo_dir" pull --ff-only origin main
+      exec "$_repo_dir/$(basename "${BASH_SOURCE[0]}")" "$@"
+    fi
+  fi
+fi
 
 REPO_URL="${REPO_URL:-https://github.com/tejokumar/grok-stocks-alert.git}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/projects/grok-stocks-alert}"
