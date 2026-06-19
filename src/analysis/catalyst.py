@@ -1,16 +1,24 @@
 import logging
+from datetime import datetime, timezone
 
 from src.config import Settings
 from src.data import FMPClient, PolygonClient, ROICClient
-from src.models import Alert, AlertType, NewsItem
+from src.models import Alert, AlertType, NewsItem, StockSnapshot
 
 logger = logging.getLogger(__name__)
 
 CATALYST_KEYWORDS = [
-    "earnings", "guidance", "fda", "approval", "acquisition", "merger",
-    "partnership", "contract", "upgrade", "downgrade", "buyout", "offering",
-    "short squeeze", "breakthrough", "launch", "patent", "dividend",
-    "buyback", "analyst", "revenue", "beat", "miss", "ceo", "cfo",
+    "fda", "approval", "acquisition", "merger", "partnership", "contract",
+    "upgrade", "buyout", "short squeeze", "breakthrough", "launch", "patent",
+    "buyback", "earnings beat", "guidance raise", "raised guidance",
+    "price target", "takeover", "activist",
+]
+
+HIGH_IMPACT_KEYWORDS = [
+    "fda approval", "merger", "acquisition", "buyout", "earnings beat",
+    "guidance raise", "raised guidance", "price target", "upgrade",
+    "breakthrough", "contract award", "partnership", "short squeeze",
+    "offering withdrawn", "activist", "takeover",
 ]
 
 
@@ -27,36 +35,89 @@ class CatalystAnalyzer:
         self.fmp = fmp
         self.roic = roic
 
-    def find_catalyst_alerts(self, symbols: list[str]) -> list[Alert]:
+    def find_strong_catalyst_alerts(
+        self,
+        symbols: list[str],
+        watchlist_by_symbol: dict[str, StockSnapshot],
+        phase: str = "regular",
+    ) -> list[Alert]:
         alerts: list[Alert] = []
-        for symbol in symbols[:10]:
-            news = self._gather_news(symbol)
-            roic_catalysts = self.roic.get_catalysts(symbol)
-            scored = self._score_news(news)
-            if scored:
-                top = scored[0]
+        scan_symbols = symbols[:25]
+
+        for symbol in scan_symbols:
+            snap = watchlist_by_symbol.get(symbol)
+            symbol_alerts = self._scan_symbol_catalysts(symbol, snap, phase)
+            if symbol_alerts:
+                best = max(symbol_alerts, key=lambda a: a.confidence)
+                if best.confidence >= self.settings.min_catalyst_confidence:
+                    alerts.append(best)
+
+        if phase == "premarket":
+            premarket = self._scan_market_headlines(watchlist_by_symbol)
+            by_symbol: dict[str, Alert] = {}
+            for alert in premarket:
+                existing = by_symbol.get(alert.symbol)
+                if not existing or alert.confidence > existing.confidence:
+                    by_symbol[alert.symbol] = alert
+            alerts.extend(by_symbol.values())
+
+        return alerts
+
+    def _scan_symbol_catalysts(
+        self,
+        symbol: str,
+        snapshot: StockSnapshot | None,
+        phase: str,
+    ) -> list[Alert]:
+        alerts: list[Alert] = []
+        news = self._gather_news(symbol)
+
+        scored_items = [
+            (item, score) for item, score in self._score_news_items(news)
+            if self._is_strong(score, item)
+        ]
+        if scored_items:
+            item, score = scored_items[0]
+            alerts.append(self._news_to_alert(symbol, item, score, snapshot, phase))
+
+        for cat in self.roic.get_catalysts(symbol)[:1]:
+            title = cat.get("title") or cat.get("description", "ROIC catalyst")
+            text = f"{title} {cat.get('summary', '')}".lower()
+            score = self._keyword_score(text)
+            if self._is_strong(score, None, text):
                 alerts.append(
                     Alert(
-                        alert_type=AlertType.CATALYST,
+                        alert_type=AlertType.PREMARKET if phase == "premarket" else AlertType.CATALYST,
                         symbol=symbol,
-                        title=f"News catalyst: {top.title[:80]}",
-                        message=top.summary[:400] or top.title,
-                        confidence=0.7,
-                        metadata={"url": top.url, "source": top.source},
-                    )
-                )
-            for cat in roic_catalysts[:1]:
-                title = cat.get("title") or cat.get("description", "ROIC catalyst")
-                alerts.append(
-                    Alert(
-                        alert_type=AlertType.CATALYST,
-                        symbol=symbol,
-                        title=f"ROIC catalyst: {title[:80]}",
+                        title=f"Strong catalyst: {title[:80]}",
                         message=str(cat.get("summary") or cat.get("description", title))[:400],
-                        confidence=float(cat.get("confidence", 0.6)),
-                        metadata={"source": "roic"},
+                        confidence=min(0.92, 0.72 + score * 0.04),
+                        metadata={"source": "roic", "catalyst_key": f"roic:{symbol}:{title[:60]}"},
                     )
                 )
+
+        return alerts
+
+    def _scan_market_headlines(
+        self,
+        watchlist_by_symbol: dict[str, StockSnapshot],
+    ) -> list[Alert]:
+        alerts: list[Alert] = []
+        try:
+            latest = self.fmp.get_news(limit=30)
+        except Exception as exc:
+            logger.warning("Market headline scan failed: %s", exc)
+            return alerts
+
+        for item, score in self._score_news_items(latest):
+            if not self._is_strong(score, item):
+                continue
+            symbol = item.symbol
+            if symbol == "MARKET" or len(symbol) > 5:
+                continue
+            snap = watchlist_by_symbol.get(symbol)
+            alerts.append(self._news_to_alert(symbol, item, score, snap, "premarket"))
+
         return alerts
 
     def find_upside_candidates(self, symbols: list[str] | None = None) -> list[Alert]:
@@ -80,6 +141,39 @@ class CatalystAnalyzer:
             )
         return alerts
 
+    def _news_to_alert(
+        self,
+        symbol: str,
+        item: NewsItem,
+        score: int,
+        snapshot: StockSnapshot | None,
+        phase: str,
+    ) -> Alert:
+        phase_label = "Pre-market" if phase == "premarket" else "Intraday"
+        price_note = ""
+        if snapshot and snapshot.price > 0:
+            price_note = f"\nPrice: ${snapshot.price:.2f} ({snapshot.change_pct:+.1f}%)"
+
+        freshness = ""
+        if item.published_at:
+            age_hours = (datetime.now(timezone.utc) - item.published_at.astimezone(timezone.utc)).total_seconds() / 3600
+            if age_hours < 6:
+                freshness = " [FRESH]"
+
+        return Alert(
+            alert_type=AlertType.PREMARKET if phase == "premarket" else AlertType.CATALYST,
+            symbol=symbol,
+            title=f"{phase_label} catalyst{freshness}: {item.title[:80]}",
+            message=(item.summary[:350] or item.title) + price_note,
+            confidence=min(0.95, 0.68 + score * 0.05),
+            metadata={
+                "url": item.url,
+                "source": item.source,
+                "catalyst_key": f"news:{item.url or item.title[:80]}",
+                "keyword_score": score,
+            },
+        )
+
     def _gather_news(self, symbol: str) -> list[NewsItem]:
         items: list[NewsItem] = []
         try:
@@ -96,12 +190,36 @@ class CatalystAnalyzer:
             logger.warning("ROIC news for %s: %s", symbol, exc)
         return items
 
-    def _score_news(self, items: list[NewsItem]) -> list[NewsItem]:
-        scored: list[tuple[int, NewsItem]] = []
+    def _score_news_items(self, items: list[NewsItem]) -> list[tuple[NewsItem, int]]:
+        scored: list[tuple[NewsItem, int]] = []
         for item in items:
-            text = f"{item.title} {item.summary}".lower()
-            hits = sum(1 for kw in CATALYST_KEYWORDS if kw in text)
-            if hits:
-                scored.append((hits, item))
-        scored.sort(key=lambda x: x[0], reverse=True)
-        return [item for _, item in scored]
+            score = self._keyword_score(f"{item.title} {item.summary}")
+            if score > 0:
+                scored.append((item, score))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return scored
+
+    def _keyword_score(self, text: str) -> int:
+        text = text.lower()
+        hits = sum(1 for kw in CATALYST_KEYWORDS if kw in text)
+        for phrase in HIGH_IMPACT_KEYWORDS:
+            if phrase in text:
+                hits += 2
+        return hits
+
+    def _is_strong(self, score: int, item: NewsItem | None, text: str | None = None) -> bool:
+        combined = text or (f"{item.title} {item.summary}" if item else "")
+        combined = combined.lower()
+        has_high_impact = any(phrase in combined for phrase in HIGH_IMPACT_KEYWORDS)
+
+        if has_high_impact and score >= 2:
+            return True
+        if score >= self.settings.strong_catalyst_keyword_hits + 2:
+            return True
+        if item and item.published_at and has_high_impact:
+            age_hours = (
+                datetime.now(timezone.utc) - item.published_at.astimezone(timezone.utc)
+            ).total_seconds() / 3600
+            if age_hours < 4:
+                return True
+        return False

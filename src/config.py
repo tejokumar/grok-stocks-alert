@@ -28,7 +28,11 @@ class Settings(BaseSettings):
     breakout_volume_multiplier: float = 2.0
     breakout_price_pct: float = 3.0
     max_watchlist_size: int = 50
-    max_daily_alerts: int = 3
+    max_daily_alerts: int = 0
+    max_conviction_per_scan: int = 5
+    min_catalyst_confidence: float = 0.75
+    strong_catalyst_keyword_hits: int = 3
+    catalyst_cooldown_minutes: int = 180
     min_conviction_score: float = 0.58
     min_alert_confidence: float = 0.68
     min_conviction_price: float = 5.0

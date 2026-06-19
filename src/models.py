@@ -58,8 +58,16 @@ class Alert:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def format_telegram(self, prefix: str) -> str:
-        header = f"<b>{prefix}</b> | HIGH CONVICTION"
+        label = {
+            AlertType.CATALYST: "CATALYST",
+            AlertType.PREMARKET: "PRE-MARKET CATALYST",
+            AlertType.BREAKOUT: "BREAKOUT",
+            AlertType.UPSIDE_POTENTIAL: "HIGH CONVICTION",
+            AlertType.DIRECTION_CHANGE: "DIRECTION CHANGE",
+            AlertType.TRENDING: "TRENDING",
+        }.get(self.alert_type, self.alert_type.value.upper())
+        header = f"<b>{prefix}</b> | {label}"
         body = f"<b>{self.symbol}</b> — {self.title}\n\n{self.message}"
         if self.confidence:
-            body += f"\n\nConviction: {self.confidence:.0%}"
+            body += f"\n\nConfidence: {self.confidence:.0%}"
         return f"{header}\n\n{body}"

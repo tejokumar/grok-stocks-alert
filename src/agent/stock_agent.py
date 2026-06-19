@@ -43,48 +43,53 @@ class StockAlertAgent:
             logger.info("Outside agent window — skipping scan")
             return
 
-        trading_date = now.strftime("%Y-%m-%d")
-        slots = self.state.remaining_daily_slots(trading_date, self.settings.max_daily_alerts)
-        if slots <= 0:
-            logger.info("Daily alert limit reached (%d) — skipping scan", self.settings.max_daily_alerts)
-            return
-
         if force:
             phase = "regular"
             logger.info("Force mode — ignoring market hours")
         else:
             phase = "premarket" if self.calendar.is_premarket_window(now) else "regular"
-        logger.info("Starting %s scan at %s (%d daily slots left)", phase, now.isoformat(), slots)
+        logger.info("Starting %s scan at %s", phase, now.isoformat())
 
         watchlist = self.trending.discover_trending()
         focus = watchlist[: self.settings.max_analysis_symbols]
-        symbols = [s.symbol for s in focus]
+        symbols = [s.symbol for s in watchlist]
+        watchlist_by_symbol = {s.symbol: s for s in watchlist}
         self.state.update_watchlist(symbols)
-        logger.info("Focus list: %d symbols — %s", len(symbols), ", ".join(symbols[:8]))
+        logger.info("Watchlist: %d symbols — %s", len(symbols), ", ".join(symbols[:8]))
 
-        candidates: list[Alert] = []
-        candidates.extend(self.breakout.detect_breakouts(focus))
-        candidates.extend(self.direction.detect_direction_changes(focus))
-        candidates.extend(self.catalyst.find_catalyst_alerts(symbols))
-        candidates.extend(self.catalyst.find_upside_candidates(symbols))
-        candidates.extend(self._xai_catalyst_alerts(symbols[:6]))
+        catalyst_alerts = self.catalyst.find_strong_catalyst_alerts(
+            symbols, watchlist_by_symbol, phase=phase,
+        )
+        catalyst_alerts.extend(self._xai_catalyst_alerts(symbols[:12], phase))
+        logger.info("Strong catalyst alerts: %d", len(catalyst_alerts))
+        self._dispatch_catalyst_alerts(catalyst_alerts)
 
-        logger.info("Raw candidate signals: %d", len(candidates))
+        conviction_candidates: list[Alert] = []
+        conviction_candidates.extend(self.breakout.detect_breakouts(focus))
+        conviction_candidates.extend(self.direction.detect_direction_changes(focus))
+        conviction_candidates.extend(self.catalyst.find_upside_candidates(symbols[:20]))
 
-        top_picks = self.conviction.select_top_picks(candidates, focus, slots_available=slots)
-        logger.info("High conviction picks: %d", len(top_picks))
+        if self.settings.max_daily_alerts > 0:
+            trading_date = now.strftime("%Y-%m-%d")
+            slots = self.state.remaining_daily_slots(trading_date, self.settings.max_daily_alerts)
+        else:
+            slots = self.settings.max_conviction_per_scan
 
-        self._dispatch_alerts(top_picks, trading_date)
+        if slots > 0:
+            top_picks = self.conviction.select_top_picks(
+                conviction_candidates, focus, slots_available=slots,
+            )
+            logger.info("High conviction picks: %d", len(top_picks))
+            self._dispatch_conviction_alerts(top_picks)
+
         self.state.set_last_scan()
 
-    def _xai_catalyst_alerts(self, symbols: list[str]) -> list[Alert]:
+    def _xai_catalyst_alerts(self, symbols: list[str], phase: str) -> list[Alert]:
         if not self.settings.enable_xai_catalyst_search:
             return []
 
         alerts: list[Alert] = []
         for symbol in symbols:
-            if self.state.already_alerted_today(symbol, self.calendar.now().strftime("%Y-%m-%d")):
-                continue
             context_parts = []
             try:
                 news = self.polygon.get_news(symbol, limit=3)
@@ -92,18 +97,75 @@ class StockAlertAgent:
             except Exception:
                 pass
             insight = self.xai.analyze_catalysts(symbol, "\n".join(context_parts))
-            if insight:
-                alerts.extend(self.xai.to_alerts(insight))
+            if not insight:
+                continue
+            xai_alerts = self.xai.to_alerts(insight)
+            for alert in xai_alerts:
+                if phase == "premarket":
+                    alert.alert_type = AlertType.PREMARKET
+                alert.metadata["catalyst_key"] = f"xai:{symbol}:{insight.summary[:60]}"
+                if alert.confidence >= self.settings.min_catalyst_confidence:
+                    alerts.append(alert)
         return alerts
 
-    def _dispatch_alerts(self, alerts: list[Alert], trading_date: str) -> None:
+    def _enrich_with_price(self, alert: Alert, watchlist_by_symbol: dict[str, StockSnapshot] | None = None) -> Alert:
+        snap = (watchlist_by_symbol or {}).get(alert.symbol)
+        price = snap.price if snap and snap.price > 0 else 0.0
+        if price <= 0:
+            try:
+                quote = self.fmp.get_quote(alert.symbol)
+                if quote:
+                    price = quote.price
+            except Exception:
+                pass
+
+        if price > 0:
+            pick = self.conviction._build_pick(alert.symbol, [alert], snap)
+            alert.metadata["current_price"] = price
+            alert.metadata["price_target"] = pick.price_target
+            alert.metadata["target_pct"] = pick.target_pct
+            price_block = (
+                f"Current Price: ${price:.2f}\n"
+                f"2-4 Week Target: ${pick.price_target:.2f} ({pick.target_pct:+.1f}%)\n\n"
+            )
+            if "Current Price:" not in alert.message:
+                alert.message = price_block + alert.message
+        return alert
+
+    def _dispatch_catalyst_alerts(self, alerts: list[Alert]) -> None:
+        alerts.sort(key=lambda a: a.confidence, reverse=True)
+        seen_keys: set[str] = set()
+        sent_symbols: set[str] = set()
+
         for alert in alerts:
-            if self.state.already_alerted_today(alert.symbol, trading_date):
-                logger.info("Already alerted on %s today — skipping", alert.symbol)
+            key = alert.metadata.get("catalyst_key", f"{alert.symbol}:{alert.title[:50]}")
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+
+            if not self.state.should_send_alert(key, cooldown_minutes=self.settings.catalyst_cooldown_minutes):
                 continue
 
+            symbol_key = f"catalyst:{alert.symbol}"
+            if not self.state.should_send_alert(symbol_key, cooldown_minutes=self.settings.catalyst_cooldown_minutes):
+                continue
+            if symbol_key in sent_symbols:
+                continue
+
+            alert = self._enrich_with_price(alert)
+            if self.telegram.send(alert):
+                self.state.mark_alert_sent(key)
+                self.state.mark_alert_sent(symbol_key)
+                sent_symbols.add(symbol_key)
+                logger.info("Sent catalyst alert: %s — %s", alert.symbol, alert.title[:60])
+
+    def _dispatch_conviction_alerts(self, alerts: list[Alert]) -> None:
+        for alert in alerts:
             if alert.confidence < self.settings.min_alert_confidence:
-                logger.info("Below confidence threshold: %s (%.0f%%)", alert.symbol, alert.confidence * 100)
+                continue
+
+            key = f"conviction:{alert.symbol}:{alert.title[:40]}"
+            if not self.state.should_send_alert(key, cooldown_minutes=240):
                 continue
 
             validated = self.claude.validate_alert(alert)
@@ -111,10 +173,13 @@ class StockAlertAgent:
                 continue
 
             if self.telegram.send(validated):
-                self.state.mark_daily_alert(alert.symbol, trading_date)
-                self.state.mark_alert_sent(f"conviction:{alert.symbol}")
+                self.state.mark_alert_sent(key)
+                if self.settings.max_daily_alerts > 0:
+                    self.state.mark_daily_alert(
+                        alert.symbol, self.calendar.now().strftime("%Y-%m-%d"),
+                    )
                 logger.info(
-                    "Sent high conviction alert: %s @ $%.2f → $%.2f",
+                    "Sent conviction alert: %s @ $%.2f → $%.2f",
                     alert.symbol,
                     validated.metadata.get("current_price", 0),
                     validated.metadata.get("price_target", 0),
@@ -124,8 +189,8 @@ class StockAlertAgent:
         now = self.calendar.now()
         self.telegram.send_text(
             f"Agent started at {now.strftime('%Y-%m-%d %H:%M %Z')}. "
-            f"Max {self.settings.max_daily_alerts} high-conviction alerts per day. "
-            f"Each alert includes current price and 2-4 week target."
+            f"Strong catalyst alerts fire immediately during pre-market and intraday. "
+            f"Consolidated high-conviction picks sent when multi-signal setups appear."
         )
 
     def close(self) -> None:
