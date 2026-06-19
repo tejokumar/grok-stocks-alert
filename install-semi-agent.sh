@@ -169,6 +169,11 @@ write_clear_cache_script() {
   chmod +x "$INSTALL_DIR/clear-semi-cache.sh"
 }
 
+write_launchagent_scripts() {
+  log "Enabling launchd scripts"
+  chmod +x "$INSTALL_DIR/install-semi-launchagent.sh" "$INSTALL_DIR/uninstall-semi-launchagent.sh"
+}
+
 install_launch_agent() {
   [[ "$INSTALL_LAUNCH_AGENT" == "yes" ]] || { log "Skipping launch agent (INSTALL_LAUNCH_AGENT=$INSTALL_LAUNCH_AGENT)"; return; }
 
@@ -253,9 +258,9 @@ NEXT STEPS (on your Mac mini):
    $INSTALL_DIR/logs/launchd.stdout.log
 
 LaunchAgent controls:
+   $INSTALL_DIR/install-semi-launchagent.sh                              # install/reload
+   $INSTALL_DIR/uninstall-semi-launchagent.sh                              # full remove
    launchctl kickstart -k gui/\$(id -u)/com.tejokumar.grok-semi-alerts   # restart
-   launchctl bootout gui/\$(id -u)/com.tejokumar.grok-semi-alerts          # stop
-   launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.tejokumar.grok-semi-alerts.plist  # start
 
 Optional env overrides for install:
    INSTALL_DIR=~/other/path/grok-stocks-alert ./install-semi-agent.sh
@@ -275,6 +280,7 @@ main() {
   write_start_script
   write_test_script
   write_clear_cache_script
+  write_launchagent_scripts
   install_launch_agent
   print_next_steps
 }

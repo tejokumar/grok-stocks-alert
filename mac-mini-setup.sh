@@ -61,7 +61,7 @@ cd "$(dirname "$0")"
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 exec uv run python run_semi.py "$@"
 EOF
-chmod +x start-semi-agent.sh test-semi-agent.sh clear-semi-cache.sh
+chmod +x start-semi-agent.sh test-semi-agent.sh clear-semi-cache.sh install-semi-launchagent.sh uninstall-semi-launchagent.sh
 
 printf '\n[setup] Python: %s\n' "$(uv run python --version 2>&1)"
 printf '[setup] Done. Next:\n'

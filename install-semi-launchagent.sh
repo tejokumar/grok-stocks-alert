@@ -7,7 +7,7 @@
 #   INSTALL_DIR=~/projects/grok-stocks-alert ./install-semi-launchagent.sh
 #
 # Remove LaunchAgent:
-#   ./install-semi-launchagent.sh --remove
+#   ./uninstall-semi-launchagent.sh
 
 set -euo pipefail
 
@@ -17,17 +17,6 @@ PLIST_PATH="$HOME/Library/LaunchAgents/${PLIST_LABEL}.plist"
 START_SCRIPT="${INSTALL_DIR}/start-semi-agent.sh"
 LOG_OUT="${INSTALL_DIR}/logs/launchd.stdout.log"
 LOG_ERR="${INSTALL_DIR}/logs/launchd.stderr.log"
-
-remove_agent() {
-  launchctl bootout "gui/$(id -u)/${PLIST_LABEL}" 2>/dev/null || true
-  rm -f "$PLIST_PATH"
-  printf 'Removed LaunchAgent: %s\n' "$PLIST_LABEL"
-}
-
-if [[ "${1:-}" == "--remove" ]]; then
-  remove_agent
-  exit 0
-fi
 
 [[ "$(uname -s)" == "Darwin" ]] || { printf 'ERROR: macOS only\n' >&2; exit 1; }
 [[ -x "$START_SCRIPT" ]] || {
@@ -79,5 +68,5 @@ printf '  stdout: %s\n' "$LOG_OUT"
 printf '  stderr: %s\n' "$LOG_ERR"
 printf '\nControls:\n'
 printf '  restart:  launchctl kickstart -k gui/$(id -u)/%s\n' "$PLIST_LABEL"
-printf '  stop:     %s --remove\n' "$(basename "$0")"
+printf '  uninstall: %s/uninstall-semi-launchagent.sh\n' "$INSTALL_DIR"
 printf '  status:   launchctl print gui/$(id -u)/%s\n' "$PLIST_LABEL"
