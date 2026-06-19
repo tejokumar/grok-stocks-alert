@@ -67,6 +67,7 @@ export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 uv run python run_semi.py --force
 EOF
 chmod +x test-semi-agent.sh
+chmod +x clear-semi-cache.sh 2>/dev/null || true
 
 echo ""
 echo "============================================================"

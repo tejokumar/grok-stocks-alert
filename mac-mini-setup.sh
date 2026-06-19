@@ -71,6 +71,7 @@ export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 uv run python run_semi.py --force
 EOF
 chmod +x test-semi-agent.sh
+chmod +x clear-semi-cache.sh
 
 printf '\n[setup] Python: %s\n' "$(uv run python --version 2>&1)"
 printf '[setup] Done. Next:\n'

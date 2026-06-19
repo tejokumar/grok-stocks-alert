@@ -171,6 +171,35 @@ SCRIPT
   chmod +x "$INSTALL_DIR/test-semi-agent.sh"
 }
 
+write_clear_cache_script() {
+  log "Writing cache reset script: $INSTALL_DIR/clear-semi-cache.sh"
+  cat > "$INSTALL_DIR/clear-semi-cache.sh" <<'SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")"
+STATE_FILE="data/semi_state.json"
+CACHE_DIR="data/cache"
+mkdir -p data logs "$CACHE_DIR"
+cat > "$STATE_FILE" <<'JSON'
+{
+  "sent_alerts": {},
+  "daily_alerts": {},
+  "trending_watchlist": [],
+  "symbol_baselines": {},
+  "symbol_theses": {},
+  "last_scan": null
+}
+JSON
+rm -rf "${CACHE_DIR:?}/"*
+printf 'Cleared semi agent cache:\n'
+printf '  - %s\n' "$STATE_FILE"
+printf '  - %s/*\n' "$CACHE_DIR"
+printf '\nRun a test scan:\n'
+printf '  %s/test-semi-agent.sh\n' "$(pwd)"
+SCRIPT
+  chmod +x "$INSTALL_DIR/clear-semi-cache.sh"
+}
+
 install_launch_agent() {
   [[ "$INSTALL_LAUNCH_AGENT" == "yes" ]] || { log "Skipping launch agent (INSTALL_LAUNCH_AGENT=$INSTALL_LAUNCH_AGENT)"; return; }
 
@@ -244,6 +273,9 @@ NEXT STEPS (on your Mac mini):
 2) Test one scan immediately:
    $INSTALL_DIR/test-semi-agent.sh
 
+   Reset cooldowns/theses before retesting:
+   $INSTALL_DIR/clear-semi-cache.sh
+
 3) Run during market hours (waits until 9:15 AM ET):
    $INSTALL_DIR/start-semi-agent.sh
 
@@ -273,6 +305,7 @@ main() {
   setup_directories
   write_start_script
   write_test_script
+  write_clear_cache_script
   install_launch_agent
   print_next_steps
 }
