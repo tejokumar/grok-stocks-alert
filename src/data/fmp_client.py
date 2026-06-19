@@ -75,6 +75,8 @@ class FMPClient:
                         datetime.strptime(published, "%Y-%m-%d %H:%M:%S") if published else None
                     ),
                     source="fmp",
+                    tickers=[sym] if sym else [],
+                    queried_symbol=symbol.upper() if symbol else "",
                 )
             )
         return items

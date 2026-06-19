@@ -74,6 +74,8 @@ class PolygonClient:
                     url=article.get("article_url", ""),
                     published_at=datetime.fromisoformat(published.replace("Z", "+00:00")) if published else None,
                     source="polygon",
+                    tickers=tickers,
+                    queried_symbol=symbol.upper() if symbol else "",
                 )
             )
         return items

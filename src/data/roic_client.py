@@ -146,14 +146,17 @@ class ROICClient:
                     published_at = datetime.fromisoformat(published.replace("Z", "+00:00"))
                 except ValueError:
                     published_at = None
+            sym = article.get("symbol", symbol.upper())
             items.append(
                 NewsItem(
-                    symbol=article.get("symbol", symbol.upper()),
+                    symbol=sym,
                     title=article.get("title", ""),
                     summary=(article.get("article_text") or article.get("text", ""))[:500],
                     url=article.get("article_url") or article.get("url", ""),
                     published_at=published_at,
                     source="roic",
+                    tickers=[sym],
+                    queried_symbol=symbol.upper(),
                 )
             )
         return items

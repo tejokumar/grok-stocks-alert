@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from src.config import Settings
 from src.data import FMPClient, PolygonClient, ROICClient
 from src.models import Alert, AlertType, NewsItem, StockSnapshot
+from src.analysis.relevance import is_relevant_to_symbol
 from src.utils.dedup import catalyst_dedup_key
 
 logger = logging.getLogger(__name__)
@@ -72,7 +73,7 @@ class CatalystAnalyzer:
         news = self._gather_news(symbol)
 
         scored_items = [
-            (item, score) for item, score in self._score_news_items(news)
+            (item, score) for item, score in self._score_news_items(news, symbol)
             if self._is_strong(score, item)
         ]
         if scored_items:
@@ -115,6 +116,8 @@ class CatalystAnalyzer:
             if not self._is_strong(score, item):
                 continue
             symbol = item.symbol
+            if not is_relevant_to_symbol(symbol, item):
+                continue
             if symbol == "MARKET" or len(symbol) > 5:
                 continue
             snap = watchlist_by_symbol.get(symbol)
@@ -192,9 +195,15 @@ class CatalystAnalyzer:
             logger.warning("ROIC news for %s: %s", symbol, exc)
         return items
 
-    def _score_news_items(self, items: list[NewsItem]) -> list[tuple[NewsItem, int]]:
+    def _score_news_items(
+        self,
+        items: list[NewsItem],
+        target_symbol: str | None = None,
+    ) -> list[tuple[NewsItem, int]]:
         scored: list[tuple[NewsItem, int]] = []
         for item in items:
+            if target_symbol and not is_relevant_to_symbol(target_symbol, item):
+                continue
             score = self._keyword_score(f"{item.title} {item.summary}")
             if score > 0:
                 scored.append((item, score))

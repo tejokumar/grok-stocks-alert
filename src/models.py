@@ -35,6 +35,8 @@ class NewsItem:
     url: str
     published_at: datetime | None
     source: str
+    tickers: list[str] = field(default_factory=list)
+    queried_symbol: str = ""
 
 
 @dataclass
