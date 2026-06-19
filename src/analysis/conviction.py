@@ -109,9 +109,11 @@ class ConvictionSelector:
         has_upside = AlertType.UPSIDE_POTENTIAL in type_confidence
         has_actionable = has_breakout or has_upside
 
+        pick.current_price = self._resolve_price(symbol, snapshot)
+
         if not has_actionable and peak_confidence < 0.88:
             pick.conviction_score = 0.0
-            pick.current_price = self._resolve_price(symbol, snapshot)
+            pick.price_target = self._compute_price_target(pick)
             return pick
 
         base_score = sum(
@@ -132,19 +134,32 @@ class ConvictionSelector:
             base_score += 0.05
 
         pick.conviction_score = min(0.98, base_score)
-        pick.current_price = self._resolve_price(symbol, snapshot)
         pick.price_target = self._compute_price_target(pick)
         return pick
 
+    def estimate_target(
+        self,
+        symbol: str,
+        price: float,
+        snapshot: StockSnapshot | None = None,
+    ) -> tuple[float, float]:
+        """Return (price_target, target_pct) for a given current price."""
+        if price <= 0:
+            return 0.0, 0.0
+        pick = ConsolidatedPick(symbol=symbol, snapshot=snapshot, current_price=price)
+        target = self._compute_price_target(pick)
+        pct = (target - price) / price * 100 if target else 0.0
+        return target, pct
+
     def _resolve_price(self, symbol: str, snapshot: StockSnapshot | None) -> float:
-        if snapshot and snapshot.price > 0:
-            return snapshot.price
         try:
             quote = self.fmp.get_quote(symbol)
             if quote and quote.price > 0:
                 return quote.price
         except Exception as exc:
             logger.warning("Quote fetch failed for %s: %s", symbol, exc)
+        if snapshot and snapshot.price > 0:
+            return snapshot.price
         return 0.0
 
     def _compute_price_target(self, pick: ConsolidatedPick) -> float:

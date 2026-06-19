@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     max_conviction_per_scan: int = 5
     min_catalyst_confidence: float = 0.75
     strong_catalyst_keyword_hits: int = 3
-    catalyst_cooldown_minutes: int = 180
+    catalyst_cooldown_minutes: int = 360
     min_conviction_score: float = 0.58
     min_alert_confidence: float = 0.68
     min_conviction_price: float = 5.0

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from src.config import Settings
 from src.data import FMPClient, PolygonClient, ROICClient
 from src.models import Alert, AlertType, NewsItem, StockSnapshot
+from src.utils.dedup import catalyst_dedup_key
 
 logger = logging.getLogger(__name__)
 
@@ -44,24 +45,22 @@ class CatalystAnalyzer:
         alerts: list[Alert] = []
         scan_symbols = symbols[:25]
 
+        by_symbol: dict[str, Alert] = {}
         for symbol in scan_symbols:
             snap = watchlist_by_symbol.get(symbol)
             symbol_alerts = self._scan_symbol_catalysts(symbol, snap, phase)
             if symbol_alerts:
                 best = max(symbol_alerts, key=lambda a: a.confidence)
                 if best.confidence >= self.settings.min_catalyst_confidence:
-                    alerts.append(best)
+                    by_symbol[symbol] = best
 
         if phase == "premarket":
-            premarket = self._scan_market_headlines(watchlist_by_symbol)
-            by_symbol: dict[str, Alert] = {}
-            for alert in premarket:
+            for alert in self._scan_market_headlines(watchlist_by_symbol):
                 existing = by_symbol.get(alert.symbol)
                 if not existing or alert.confidence > existing.confidence:
                     by_symbol[alert.symbol] = alert
-            alerts.extend(by_symbol.values())
 
-        return alerts
+        return list(by_symbol.values())
 
     def _scan_symbol_catalysts(
         self,
@@ -92,7 +91,10 @@ class CatalystAnalyzer:
                         title=f"Strong catalyst: {title[:80]}",
                         message=str(cat.get("summary") or cat.get("description", title))[:400],
                         confidence=min(0.92, 0.72 + score * 0.04),
-                        metadata={"source": "roic", "catalyst_key": f"roic:{symbol}:{title[:60]}"},
+                        metadata={
+                            "source": "roic",
+                            "catalyst_key": catalyst_dedup_key(symbol, title, "roic"),
+                        },
                     )
                 )
 
@@ -169,7 +171,7 @@ class CatalystAnalyzer:
             metadata={
                 "url": item.url,
                 "source": item.source,
-                "catalyst_key": f"news:{item.url or item.title[:80]}",
+                "catalyst_key": catalyst_dedup_key(symbol, item.title, item.source),
                 "keyword_score": score,
             },
         )
