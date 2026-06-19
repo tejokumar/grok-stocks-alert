@@ -2,7 +2,7 @@
 
 > **Audience:** Future coding agents, LLM assistants, and maintainers.  
 > **Repo:** https://github.com/tejokumar/grok-stocks-alert  
-> **Language:** Python 3.11+  
+> **Language:** Python 3.11+ (managed via [uv](https://github.com/astral-sh/uv))
 > **Last updated:** 2026-06-19
 
 This document describes the full architecture, behavior, and extension points of the stock alerting system. Read this before modifying agents, adding features, or debugging production runs.
@@ -527,6 +527,8 @@ curl -fsSL https://raw.githubusercontent.com/tejokumar/grok-stocks-alert/main/in
 
 Installs to: `~/projects/grok-stocks-alert`
 
+Uses **uv** — installs Python 3.12 automatically (fixes Mac mini system Python issues).
+
 ### Scripts created by installer
 
 | Script | Purpose |
@@ -574,12 +576,12 @@ Measured semi agent scan (~518 HTTP calls):
 ## 19. Testing commands
 
 ```bash
-# Activate venv
-source .venv/bin/activate
+# Sync deps (after pull)
+uv sync
 
 # Force scan (either agent)
-python run_semi.py --force
-python run.py --force
+uv run python run_semi.py --force
+uv run python run.py --force
 
 # Verify imports
 python -c "from src.agent.semiconductor_agent import SemiconductorAlertAgent; print('OK')"

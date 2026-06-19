@@ -86,13 +86,20 @@ When a catalyst alert also has a recent analyst upgrade, the label becomes **CAT
 
 ## Quick start (manual install)
 
-### 1. Clone and install
+### 1. Clone and install (uv — recommended)
 
 ```bash
 git clone https://github.com/tejokumar/grok-stocks-alert.git
 cd grok-stocks-alert
-python3 -m venv .venv
-source .venv/bin/activate
+curl -LsSf https://astral.sh/uv/install.sh | sh   # if uv not installed
+uv python install 3.12
+uv sync
+```
+
+Or with classic pip:
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -106,15 +113,14 @@ nano .env   # add your API keys
 ### 3. Run
 
 ```bash
-# General agent (all stocks)
-python run.py
+# With uv (recommended)
+uv run python run.py
+uv run python run_semi.py
+uv run python run_semi.py --force
 
-# Semiconductor agent only
+# Or activate .venv created by uv sync
+source .venv/bin/activate
 python run_semi.py
-
-# Test either agent immediately (single scan, then exit)
-python run.py --force
-python run_semi.py --force
 ```
 
 ### 4. Run both agents in parallel
@@ -139,8 +145,9 @@ curl -fsSL https://raw.githubusercontent.com/tejokumar/grok-stocks-alert/main/in
 ### What the installer does
 
 1. Clones the repo to `~/projects/grok-stocks-alert` (or `INSTALL_DIR`)
-2. Creates Python 3.11+ virtual environment
-3. Installs dependencies from `requirements.txt`
+2. Installs [uv](https://github.com/astral-sh/uv) if missing
+3. Installs Python 3.12 via `uv python install` (no Homebrew Python required)
+4. Runs `uv sync` to create `.venv` and install locked dependencies
 4. Copies `.env.example` → `.env`
 5. Creates `data/`, `logs/`, and empty `semi_state.json`
 6. Writes `start-semi-agent.sh` and `test-semi-agent.sh`

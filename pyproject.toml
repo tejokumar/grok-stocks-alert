@@ -1,0 +1,22 @@
+[project]
+name = "grok-stocks-alert"
+version = "0.1.0"
+description = "Automated stock and semiconductor alerting agents"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27.0",
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.3.0",
+    "apscheduler>=3.10.4",
+    "python-dotenv>=1.0.1",
+    "anthropic>=0.34.0",
+    "openai>=1.40.0",
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
+    "pytz>=2024.1",
+    "tenacity>=8.3.0",
+]
+
+[tool.uv]
+package = false

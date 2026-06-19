@@ -9,8 +9,9 @@ set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/tejokumar/grok-stocks-alert.git}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/projects/grok-stocks-alert}"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
+PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 INSTALL_LAUNCH_AGENT="${INSTALL_LAUNCH_AGENT:-yes}"
+UV_BIN="${UV_BIN:-}"
 
 log() { printf '\n[install] %s\n' "$*"; }
 warn() { printf '\n[install] WARNING: %s\n' "$*"; }
@@ -20,89 +21,46 @@ require_macos() {
   [[ "$(uname -s)" == "Darwin" ]] || die "This installer is for macOS only."
 }
 
-python_version_ok() {
-  local bin="$1"
-  command -v "$bin" >/dev/null 2>&1 || return 1
-  "$bin" - <<'PY' >/dev/null 2>&1
-import sys
-raise SystemExit(0 if sys.version_info >= (3, 11) else 1)
-PY
+ensure_path() {
+  export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 }
 
-find_python() {
-  if [[ "$PYTHON_BIN" != "python3" ]] && python_version_ok "$PYTHON_BIN"; then
-    printf '%s' "$PYTHON_BIN"
+resolve_uv() {
+  ensure_path
+  if [[ -n "$UV_BIN" ]] && command -v "$UV_BIN" >/dev/null 2>&1; then
+    printf '%s' "$UV_BIN"
     return 0
   fi
-
-  local candidates=(
-    python3.13 python3.12 python3.11
-    /opt/homebrew/bin/python3.13
-    /opt/homebrew/bin/python3.12
-    /opt/homebrew/bin/python3.11
-    /opt/homebrew/bin/python3
-    /usr/local/bin/python3.13
-    /usr/local/bin/python3.12
-    /usr/local/bin/python3.11
-    /usr/local/bin/python3
-    python3
-  )
-
-  local candidate
-  for candidate in "${candidates[@]}"; do
-    if python_version_ok "$candidate"; then
-      printf '%s' "$candidate"
-      return 0
-    fi
-  done
+  if command -v uv >/dev/null 2>&1; then
+    printf '%s' "uv"
+    return 0
+  fi
+  if [[ -x "$HOME/.local/bin/uv" ]]; then
+    printf '%s' "$HOME/.local/bin/uv"
+    return 0
+  fi
   return 1
 }
 
-install_python_with_brew() {
-  command -v brew >/dev/null 2>&1 || return 1
-  log "Installing Python 3.12 via Homebrew (may take a few minutes)..."
-  brew install python@3.12
-  brew link python@3.12 --overwrite --force 2>/dev/null || true
-}
-
-require_python() {
-  local found
-  if found="$(find_python)"; then
-    PYTHON_BIN="$found"
-    log "Using Python: $PYTHON_BIN ($($PYTHON_BIN --version 2>&1))"
+require_uv() {
+  local uv_cmd
+  if uv_cmd="$(resolve_uv)"; then
+    UV_BIN="$uv_cmd"
+    log "Using uv: $($UV_BIN --version 2>&1)"
     return
   fi
 
-  warn "Python 3.11+ not found on this Mac."
-  if command -v python3 >/dev/null 2>&1; then
-    warn "Default python3 is: $(python3 --version 2>&1)"
+  log "Installing uv (Python package manager)..."
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ensure_path
+
+  if uv_cmd="$(resolve_uv)"; then
+    UV_BIN="$uv_cmd"
+    log "Using uv: $($UV_BIN --version 2>&1)"
+    return
   fi
 
-  if command -v brew >/dev/null 2>&1; then
-    install_python_with_brew || die "Homebrew Python install failed."
-    if found="$(find_python)"; then
-      PYTHON_BIN="$found"
-      log "Using Python: $PYTHON_BIN ($($PYTHON_BIN --version 2>&1))"
-      return
-    fi
-  fi
-
-  die "$(cat <<'EOF'
-Python 3.11+ required.
-
-On your Mac mini, run ONE of the following, then re-run this installer:
-
-  # Option A — Homebrew (recommended)
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-  brew install python@3.12
-  echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zprofile
-  source ~/.zprofile
-  curl -fsSL https://raw.githubusercontent.com/tejokumar/grok-stocks-alert/main/install-semi-agent.sh | bash
-
-  # Option B — if Python 3.12 already installed via brew
-  PYTHON_BIN=/opt/homebrew/bin/python3.12 bash -c "$(curl -fsSL https://raw.githubusercontent.com/tejokumar/grok-stocks-alert/main/install-semi-agent.sh)"
-EOF
-)"
+  die "Failed to install uv. Add ~/.local/bin to PATH and retry."
 }
 
 clone_or_update_repo() {
@@ -124,16 +82,13 @@ clone_or_update_repo() {
   git -C "$INSTALL_DIR" checkout main
 }
 
-setup_venv() {
-  log "Creating virtual environment"
+setup_project() {
+  log "Installing Python ${PYTHON_VERSION} and dependencies via uv"
   cd "$INSTALL_DIR"
-  if [[ ! -d .venv ]]; then
-    "$PYTHON_BIN" -m venv .venv
-  fi
-  # shellcheck disable=SC1091
-  source .venv/bin/activate
-  python -m pip install --upgrade pip
-  pip install -r requirements.txt
+  ensure_path
+  "$UV_BIN" python install "$PYTHON_VERSION"
+  "$UV_BIN" sync --frozen
+  log "Environment ready: $($UV_BIN run python --version 2>&1)"
 }
 
 setup_env_file() {
@@ -171,8 +126,8 @@ write_start_script() {
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
-source .venv/bin/activate
-exec python run_semi.py "$@"
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+exec uv run python run_semi.py "$@"
 SCRIPT
   chmod +x "$INSTALL_DIR/start-semi-agent.sh"
 }
@@ -183,8 +138,8 @@ write_test_script() {
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
-source .venv/bin/activate
-python run_semi.py --force
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+uv run python run_semi.py --force
 SCRIPT
   chmod +x "$INSTALL_DIR/test-semi-agent.sh"
 }
@@ -224,7 +179,7 @@ install_launch_agent() {
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
-    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <string>${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
 </dict>
 </plist>
@@ -284,9 +239,9 @@ EOF
 
 main() {
   require_macos
-  require_python
+  require_uv
   clone_or_update_repo
-  setup_venv
+  setup_project
   setup_env_file
   setup_directories
   write_start_script
