@@ -20,12 +20,89 @@ require_macos() {
   [[ "$(uname -s)" == "Darwin" ]] || die "This installer is for macOS only."
 }
 
-require_python() {
-  command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "$PYTHON_BIN not found. Install Python 3.11+ (brew install python)."
-  "$PYTHON_BIN" - <<'PY' || die "Python 3.11+ required."
+python_version_ok() {
+  local bin="$1"
+  command -v "$bin" >/dev/null 2>&1 || return 1
+  "$bin" - <<'PY' >/dev/null 2>&1
 import sys
 raise SystemExit(0 if sys.version_info >= (3, 11) else 1)
 PY
+}
+
+find_python() {
+  if [[ "$PYTHON_BIN" != "python3" ]] && python_version_ok "$PYTHON_BIN"; then
+    printf '%s' "$PYTHON_BIN"
+    return 0
+  fi
+
+  local candidates=(
+    python3.13 python3.12 python3.11
+    /opt/homebrew/bin/python3.13
+    /opt/homebrew/bin/python3.12
+    /opt/homebrew/bin/python3.11
+    /opt/homebrew/bin/python3
+    /usr/local/bin/python3.13
+    /usr/local/bin/python3.12
+    /usr/local/bin/python3.11
+    /usr/local/bin/python3
+    python3
+  )
+
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if python_version_ok "$candidate"; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+install_python_with_brew() {
+  command -v brew >/dev/null 2>&1 || return 1
+  log "Installing Python 3.12 via Homebrew (may take a few minutes)..."
+  brew install python@3.12
+  brew link python@3.12 --overwrite --force 2>/dev/null || true
+}
+
+require_python() {
+  local found
+  if found="$(find_python)"; then
+    PYTHON_BIN="$found"
+    log "Using Python: $PYTHON_BIN ($($PYTHON_BIN --version 2>&1))"
+    return
+  fi
+
+  warn "Python 3.11+ not found on this Mac."
+  if command -v python3 >/dev/null 2>&1; then
+    warn "Default python3 is: $(python3 --version 2>&1)"
+  fi
+
+  if command -v brew >/dev/null 2>&1; then
+    install_python_with_brew || die "Homebrew Python install failed."
+    if found="$(find_python)"; then
+      PYTHON_BIN="$found"
+      log "Using Python: $PYTHON_BIN ($($PYTHON_BIN --version 2>&1))"
+      return
+    fi
+  fi
+
+  die "$(cat <<'EOF'
+Python 3.11+ required.
+
+On your Mac mini, run ONE of the following, then re-run this installer:
+
+  # Option A — Homebrew (recommended)
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  brew install python@3.12
+  echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zprofile
+  source ~/.zprofile
+  curl -fsSL https://raw.githubusercontent.com/tejokumar/grok-stocks-alert/main/install-semi-agent.sh | bash
+
+  # Option B — if Python 3.12 already installed via brew
+  PYTHON_BIN=/opt/homebrew/bin/python3.12 bash -c "$(curl -fsSL https://raw.githubusercontent.com/tejokumar/grok-stocks-alert/main/install-semi-agent.sh)"
+EOF
+)"
 }
 
 clone_or_update_repo() {
