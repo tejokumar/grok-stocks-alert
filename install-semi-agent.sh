@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # Install grok-stocks-alert semiconductor agent on macOS (Mac mini).
-# Usage:
-#   curl -fsSL https://raw.githubusercontent.com/tejokumar/grok-stocks-alert/main/install-semi-agent.sh | bash
+# Installer v3.0.0 — uses uv (no system Python / Homebrew required)
+#
+# Usage (add ?v=3 to bust CDN cache on Mac mini):
+#   curl -fsSL "https://raw.githubusercontent.com/tejokumar/grok-stocks-alert/main/install-semi-agent.sh?v=3" | bash
 # Or after cloning:
 #   cd grok-stocks-alert && ./install-semi-agent.sh
+
+INSTALLER_VERSION="3.0.0-uv"
+printf '\n[install] grok-semi-agent installer %s\n' "$INSTALLER_VERSION"
 
 set -euo pipefail
 
@@ -87,7 +92,12 @@ setup_project() {
   cd "$INSTALL_DIR"
   ensure_path
   "$UV_BIN" python install "$PYTHON_VERSION"
-  "$UV_BIN" sync --frozen
+  if [[ -f uv.lock ]]; then
+    "$UV_BIN" sync --frozen
+  else
+    warn "uv.lock not found — running uv sync without --frozen"
+    "$UV_BIN" sync
+  fi
   log "Environment ready: $($UV_BIN run python --version 2>&1)"
 }
 
