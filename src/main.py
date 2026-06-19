@@ -1,3 +1,4 @@
+import argparse
 import logging
 import signal
 import sys
@@ -42,6 +43,14 @@ def wait_for_agent_window(calendar: MarketCalendar) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Grok stock alerts agent")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Run immediately, ignoring market hours (single scan, then exit)",
+    )
+    args = parser.parse_args()
+
     setup_logging()
     settings = get_settings()
     calendar = MarketCalendar(settings)
@@ -54,6 +63,14 @@ def main() -> None:
 
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
+
+    if args.force:
+        logging.info("grok-stock-alerts-agent starting (force/test mode)")
+        agent.send_startup_message()
+        agent.run_scan(force=True)
+        agent.close()
+        logging.info("Force scan complete — exiting")
+        return
 
     logging.info("grok-stock-alerts-agent starting")
     wait_for_agent_window(calendar)

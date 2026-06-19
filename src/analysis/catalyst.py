@@ -59,9 +59,9 @@ class CatalystAnalyzer:
                 )
         return alerts
 
-    def find_upside_candidates(self) -> list[Alert]:
+    def find_upside_candidates(self, symbols: list[str] | None = None) -> list[Alert]:
         alerts: list[Alert] = []
-        candidates = self.roic.get_upside_candidates()
+        candidates = self.roic.get_upside_candidates(symbols=symbols)
         for row in candidates[:10]:
             symbol = row.get("symbol") or row.get("ticker")
             if not symbol:
@@ -90,6 +90,10 @@ class CatalystAnalyzer:
             items.extend(self.fmp.get_news(symbol, limit=5))
         except Exception as exc:
             logger.warning("FMP news for %s: %s", symbol, exc)
+        try:
+            items.extend(self.roic.get_news(symbol, limit=5))
+        except Exception as exc:
+            logger.warning("ROIC news for %s: %s", symbol, exc)
         return items
 
     def _score_news(self, items: list[NewsItem]) -> list[NewsItem]:

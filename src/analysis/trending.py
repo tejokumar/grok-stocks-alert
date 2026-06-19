@@ -23,19 +23,27 @@ class TrendingAnalyzer:
 
     def discover_trending(self) -> list[StockSnapshot]:
         buckets: dict[str, list[StockSnapshot]] = defaultdict(list)
+        seed_symbols: list[str] = []
 
         for source_name, fetch in [
             ("polygon_gainers", self.polygon.get_gainers),
             ("fmp_gainers", self.fmp.get_gainers),
             ("fmp_actives", self.fmp.get_actives),
-            ("roic_trending", self.roic.get_trending),
         ]:
             try:
                 for snap in fetch():
                     if self._passes_filters(snap):
                         buckets[snap.symbol].append(snap)
+                        seed_symbols.append(snap.symbol)
             except Exception as exc:
                 logger.warning("Trending fetch failed for %s: %s", source_name, exc)
+
+        try:
+            for snap in self.roic.get_trending(seed_symbols=seed_symbols[:20]):
+                if self._passes_filters(snap):
+                    buckets[snap.symbol].append(snap)
+        except Exception as exc:
+            logger.warning("Trending fetch failed for roic_prices: %s", exc)
 
         scored: list[tuple[float, StockSnapshot]] = []
         for symbol, snaps in buckets.items():
@@ -58,5 +66,6 @@ class TrendingAnalyzer:
     def _score_symbol(self, snaps: list[StockSnapshot]) -> float:
         source_weight = len(snaps) * 2
         max_change = max(abs(s.change_pct) for s in snaps)
-        max_volume = max(s.volume for s in snaps if s.volume)
-        return source_weight + max_change + (max_volume / 1_000_000)
+        volumes = [s.volume for s in snaps if s.volume]
+        volume_score = (max(volumes) / 1_000_000) if volumes else 0
+        return source_weight + max_change + volume_score

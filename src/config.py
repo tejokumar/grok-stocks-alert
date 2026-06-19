@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     market_close_minute: int = 0
 
     polygon_base_url: str = "https://api.polygon.io"
-    fmp_base_url: str = "https://financialmodelingprep.com/api/v3"
+    fmp_base_url: str = "https://financialmodelingprep.com/stable"
     roic_base_url: str = "https://api.roic.ai"
     xai_base_url: str = "https://api.x.ai/v1"
 

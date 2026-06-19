@@ -31,13 +31,17 @@ class StockAlertAgent:
         self.direction = DirectionAnalyzer(self.state)
         self.catalyst = CatalystAnalyzer(self.settings, self.polygon, self.fmp, self.roic)
 
-    def run_scan(self) -> None:
+    def run_scan(self, force: bool = False) -> None:
         now = self.calendar.now()
-        if not self.calendar.is_agent_active(now):
+        if not force and not self.calendar.is_agent_active(now):
             logger.info("Outside agent window — skipping scan")
             return
 
-        phase = "premarket" if self.calendar.is_premarket_window(now) else "regular"
+        if force:
+            phase = "regular"
+            logger.info("Force mode — ignoring market hours")
+        else:
+            phase = "premarket" if self.calendar.is_premarket_window(now) else "regular"
         logger.info("Starting %s scan at %s", phase, now.isoformat())
 
         watchlist = self.trending.discover_trending()
@@ -55,7 +59,7 @@ class StockAlertAgent:
         alerts.extend(self.catalyst.find_catalyst_alerts(symbols))
 
         if phase == "premarket" or len(alerts) < 3:
-            alerts.extend(self.catalyst.find_upside_candidates())
+            alerts.extend(self.catalyst.find_upside_candidates(symbols))
 
         alerts.extend(self._xai_catalyst_alerts(symbols[:8]))
 
