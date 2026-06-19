@@ -92,5 +92,8 @@ class SemiconductorTrendingAnalyzer:
         volumes = [s.volume for s in snaps if s.volume]
         volume_score = (max(volumes) / 1_000_000) if volumes else 0
         category = snaps[0].extra.get("semi_category", "")
-        category_bonus = {"gpu": 3, "memory": 2.5, "cpu": 2, "networking": 2, "equipment": 1.5}.get(category, 0)
+        category_bonus = {
+            "gpu": 3, "memory": 2.5, "cpu": 2, "networking": 2,
+            "fiber_optics": 2, "power": 1.8, "equipment": 1.5,
+        }.get(category, 0)
         return source_weight + max_change + volume_score + category_bonus

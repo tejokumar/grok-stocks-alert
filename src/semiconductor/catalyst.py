@@ -11,7 +11,9 @@ SEMI_CATALYST_KEYWORDS = [
     "data center", "export control", "chips act", "tariff",
     "capacity expansion", "yield", "utilization", "design win",
     "hyperscaler", "inference", "training chip", "networking chip",
-    "ethernet", "pcie", "optical", "power management", "analog",
+    "ethernet", "pcie", "optical", "fiber optic", "photonics", "coherent optics",
+    "power management", "power semiconductor", "sic", "gan", "datacenter power",
+    "analog",
 ]
 
 SEMI_HIGH_IMPACT = [

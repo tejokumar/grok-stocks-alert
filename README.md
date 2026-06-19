@@ -23,11 +23,11 @@ Scans the broad US equity market for trending movers, breakouts, and catalysts a
 
 ### Semiconductor agent
 
-Scoped exclusively to the semiconductor ecosystem — CPU, GPU, memory, networking, fab equipment, analog/power, and related ETFs.
+Scoped exclusively to the semiconductor ecosystem — CPU, GPU, memory, networking, fiber optics, power, fab equipment, and related ETFs.
 
 - **Entry:** `python run_semi.py`
 - **Universe:** ~40+ curated symbols (INTC, AMD, NVDA, MU, AVGO, TSM, AMAT, etc.) plus FMP semiconductor screener enrichment
-- **Categories:** Alerts tagged with `[CPU]`, `[GPU]`, `[MEMORY]`, `[NETWORKING]`, `[EQUIPMENT]`, etc.
+- **Categories:** Alerts tagged with `[CPU]`, `[GPU]`, `[MEMORY]`, `[NETWORKING]`, `[FIBER_OPTICS]`, `[POWER]`, `[EQUIPMENT]`, etc.
 - **Catalyst keywords:** HBM, DRAM, CoWoS, fab expansion, chips act, export controls, and more
 
 ---
@@ -359,9 +359,11 @@ Confidence: 85%
 | GPU / AI | NVDA |
 | Memory | MU, WDC, SNDK |
 | Networking | MRVL, QCOM, CRDO, ALAB, AVGO |
+| Fiber optics | LITE, COHR, CIEN, GLW, FN, AAOI, VIAV, POET, COMM |
 | Foundry | TSM, GFS, AMKR |
 | Equipment | AMAT, LRCX, KLAC, ASML, ONTO, TER, ACMR |
-| Analog / Power | TXN, ADI, NXPI, ON, MPWR, MCHP, SWKS |
+| Analog | TXN, ADI, NXPI, MCHP, SWKS |
+| Power | ON, MPWR, AEIS, POWI, QRVO, WOLF, DIOD, STM, ENPH, SEDG, VRT |
 | EDA / IP | SNPS, CDNS, RMBS |
 | ETFs | SMH, SOXX |
 

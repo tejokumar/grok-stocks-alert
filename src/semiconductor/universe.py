@@ -1,4 +1,4 @@
-"""Semiconductor sector stock universe — CPU, GPU, memory, networking, equipment, power."""
+"""Semiconductor sector stock universe — CPU, GPU, memory, networking, fiber optics, power, equipment."""
 
 from dataclasses import dataclass
 
@@ -30,6 +30,16 @@ SEMI_UNIVERSE: dict[str, SemiStock] = {
     "QCOM": SemiStock("QCOM", "networking", "Qualcomm"),
     "CRDO": SemiStock("CRDO", "networking", "Credo Technology"),
     "ALAB": SemiStock("ALAB", "networking", "Astera Labs"),
+    # Fiber optics / photonics
+    "LITE": SemiStock("LITE", "fiber_optics", "Lumentum"),
+    "COHR": SemiStock("COHR", "fiber_optics", "Coherent"),
+    "CIEN": SemiStock("CIEN", "fiber_optics", "Ciena"),
+    "GLW": SemiStock("GLW", "fiber_optics", "Corning"),
+    "FN": SemiStock("FN", "fiber_optics", "Fabrinet"),
+    "AAOI": SemiStock("AAOI", "fiber_optics", "Applied Optoelectronics"),
+    "VIAV": SemiStock("VIAV", "fiber_optics", "Viavi Solutions"),
+    "POET": SemiStock("POET", "fiber_optics", "POET Technologies"),
+    "COMM": SemiStock("COMM", "fiber_optics", "CommScope"),
     # Foundry / manufacturing
     "GFS": SemiStock("GFS", "foundry", "GlobalFoundries"),
     "AMKR": SemiStock("AMKR", "foundry", "Amkor Technology"),
@@ -42,14 +52,24 @@ SEMI_UNIVERSE: dict[str, SemiStock] = {
     "ONTO": SemiStock("ONTO", "equipment", "Onto Innovation"),
     "TER": SemiStock("TER", "equipment", "Teradyne"),
     "ACMR": SemiStock("ACMR", "equipment", "ACM Research"),
-    # Analog / power / mixed-signal
+    # Analog / mixed-signal
     "TXN": SemiStock("TXN", "analog", "Texas Instruments"),
     "ADI": SemiStock("ADI", "analog", "Analog Devices"),
     "NXPI": SemiStock("NXPI", "analog", "NXP Semiconductors"),
-    "ON": SemiStock("ON", "power", "ON Semiconductor"),
-    "MPWR": SemiStock("MPWR", "power", "Monolithic Power"),
     "MCHP": SemiStock("MCHP", "analog", "Microchip"),
     "SWKS": SemiStock("SWKS", "analog", "Skyworks"),
+    # Power semis / power electronics / data-center power
+    "ON": SemiStock("ON", "power", "ON Semiconductor"),
+    "MPWR": SemiStock("MPWR", "power", "Monolithic Power"),
+    "AEIS": SemiStock("AEIS", "power", "Advanced Energy"),
+    "POWI": SemiStock("POWI", "power", "Power Integrations"),
+    "QRVO": SemiStock("QRVO", "power", "Qorvo"),
+    "WOLF": SemiStock("WOLF", "power", "Wolfspeed"),
+    "DIOD": SemiStock("DIOD", "power", "Diodes Inc"),
+    "STM": SemiStock("STM", "power", "STMicroelectronics"),
+    "ENPH": SemiStock("ENPH", "power", "Enphase Energy"),
+    "SEDG": SemiStock("SEDG", "power", "SolarEdge"),
+    "VRT": SemiStock("VRT", "power", "Vertiv"),
     # EDA / IP
     "SNPS": SemiStock("SNPS", "eda", "Synopsys"),
     "CDNS": SemiStock("CDNS", "eda", "Cadence"),
@@ -62,7 +82,6 @@ SEMI_UNIVERSE: dict[str, SemiStock] = {
     "FORM": SemiStock("FORM", "equipment", "FormFactor"),
     "UCTT": SemiStock("UCTT", "equipment", "Ultra Clean"),
     "SMCI": SemiStock("SMCI", "systems", "Super Micro"),
-    "VRT": SemiStock("VRT", "power", "Vertiv"),
     # Semi-adjacent AI infra
     "SMH": SemiStock("SMH", "etf", "VanEck Semiconductor ETF"),
     "SOXX": SemiStock("SOXX", "etf", "iShares Semiconductor ETF"),
@@ -72,6 +91,8 @@ SEMI_SECTOR_KEYWORDS = {
     "semiconductor", "semiconductors", "chip", "chips", "wafer", "foundry",
     "gpu", "cpu", "memory", "dram", "nand", "hbm", "fab", "asic", "fpga",
     "analog", "networking", "silicon", "microprocessor", "accelerator",
+    "fiber optic", "fiber optics", "photonics", "optical", "power management",
+    "power semiconductor", "sic", "gallium nitride", "gan",
 }
 
 

@@ -15,8 +15,9 @@ logger = logging.getLogger(__name__)
 
 SEMI_XAI_CONTEXT = (
     "Focus exclusively on semiconductor industry catalysts: CPU, GPU, memory (DRAM/HBM/NAND), "
-    "networking chips, analog/power ICs, fab equipment, foundry capacity, advanced packaging, "
-    "AI accelerator demand, export controls, and chip supply chain."
+    "networking chips, fiber optics/photonics, analog/power ICs, power electronics, "
+    "fab equipment, foundry capacity, advanced packaging, AI accelerator demand, "
+    "export controls, and chip supply chain."
 )
 
 
@@ -78,7 +79,7 @@ class SemiconductorAlertAgent(StockAlertAgent):
         now = self.calendar.now()
         self.telegram.send_text(
             f"Semiconductor agent started at {now.strftime('%Y-%m-%d %H:%M %Z')}.\n"
-            f"Tracking CPU, GPU, memory, networking, equipment & power chips.\n"
+            f"Tracking CPU, GPU, memory, networking, fiber optics, power & equipment.\n"
             f"Universe: {len(self.universe.symbols)} symbols.\n"
             f"Includes top-analyst upgrades and thesis reversal alerts. "
             f"First alert per stock is bullish; reversals fire when thesis changes."
