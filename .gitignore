@@ -44,6 +44,7 @@ logs/
 *.log
 data/cache/
 data/state.json
+data/semi_state.json
 
 # OS
 .DS_Store

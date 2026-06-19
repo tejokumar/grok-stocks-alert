@@ -85,6 +85,7 @@ class CatalystAnalyzer:
             text = f"{title} {cat.get('summary', '')}".lower()
             score = self._keyword_score(text)
             if self._is_strong(score, None, text):
+                cat_url = cat.get("url", "")
                 alerts.append(
                     Alert(
                         alert_type=AlertType.PREMARKET if phase == "premarket" else AlertType.CATALYST,
@@ -94,6 +95,12 @@ class CatalystAnalyzer:
                         confidence=min(0.92, 0.72 + score * 0.04),
                         metadata={
                             "source": "roic",
+                            "url": cat_url,
+                            "references": (
+                                [{"title": title[:80], "url": cat_url, "source": "roic"}]
+                                if cat_url
+                                else []
+                            ),
                             "catalyst_key": catalyst_dedup_key(symbol, title, "roic"),
                         },
                     )
@@ -165,6 +172,11 @@ class CatalystAnalyzer:
             if age_hours < 6:
                 freshness = " [FRESH]"
 
+        references = (
+            [{"title": item.title[:80], "url": item.url, "source": item.source}]
+            if item.url
+            else []
+        )
         return Alert(
             alert_type=AlertType.PREMARKET if phase == "premarket" else AlertType.CATALYST,
             symbol=symbol,
@@ -174,6 +186,7 @@ class CatalystAnalyzer:
             metadata={
                 "url": item.url,
                 "source": item.source,
+                "references": references,
                 "catalyst_key": catalyst_dedup_key(symbol, item.title, item.source),
                 "keyword_score": score,
             },

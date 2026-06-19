@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     telegram_chat_id: str = ""
 
     alert_prefix: str = "grok-stock-alerts-agent"
+    semi_alert_prefix: str = "grok-semi-alerts-agent"
     scan_interval_minutes: int = 10
     premarket_start_minutes_before_open: int = 15
     min_price: float = 2.0
@@ -39,6 +40,9 @@ class Settings(BaseSettings):
     max_analysis_symbols: int = 20
     enable_xai_catalyst_search: bool = True
     enable_claude_validation: bool = True
+    enable_analyst_grades: bool = True
+    analyst_grade_lookback_days: int = 14
+    thesis_reversal_lookback_days: int = 7
     xai_model: str = "grok-3-fast"
     claude_model: str = "claude-sonnet-4-20250514"
 
@@ -54,6 +58,7 @@ class Settings(BaseSettings):
     xai_base_url: str = "https://api.x.ai/v1"
 
     state_file: str = Field(default="data/state.json")
+    semi_state_file: str = Field(default="data/semi_state.json")
     cache_dir: str = Field(default="data/cache")
 
 

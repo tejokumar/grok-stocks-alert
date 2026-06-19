@@ -27,7 +27,10 @@ Respond ONLY with valid JSON:
   "social_chatter": ["notable social media themes"],
   "sentiment": "bullish|bearish|neutral|mixed",
   "confidence": 0.0-1.0,
-  "summary": "2-3 sentence actionable summary"
+  "summary": "2-3 sentence actionable summary",
+  "references": [
+    {{"title": "headline or source name", "url": "https://full-article-url", "source": "publisher"}}
+  ]
 }}
 
 If no meaningful catalysts found, return confidence below 0.4 and explain why."""
@@ -67,6 +70,10 @@ class XAIClient:
             parsed = self._parse_json(content)
             if not parsed:
                 return None
+            references = [
+                ref for ref in (parsed.get("references") or [])
+                if isinstance(ref, dict) and ref.get("url")
+            ]
             return CatalystInsight(
                 symbol=symbol,
                 catalysts=parsed.get("catalysts", []),
@@ -75,6 +82,7 @@ class XAIClient:
                 confidence=float(parsed.get("confidence", 0.5)),
                 summary=parsed.get("summary", ""),
                 source="xai",
+                references=references,
             )
         except Exception as exc:
             logger.warning("xAI catalyst analysis failed for %s: %s", symbol, exc)
@@ -92,6 +100,15 @@ class XAIClient:
         if social_text:
             message += f"\n\nSocial chatter:\n{social_text}"
 
+        references = [
+            {
+                "title": (ref.get("title") or "Source")[:100],
+                "url": ref.get("url", ""),
+                "source": ref.get("source") or "xai",
+            }
+            for ref in insight.references
+            if ref.get("url")
+        ]
         return [
             Alert(
                 alert_type=AlertType.CATALYST,
@@ -99,7 +116,12 @@ class XAIClient:
                 title=f"xAI catalyst scan — {insight.sentiment} sentiment",
                 message=message,
                 confidence=insight.confidence,
-                metadata={"source": "xai", "sentiment": insight.sentiment},
+                metadata={
+                    "source": "xai",
+                    "sentiment": insight.sentiment,
+                    "references": references,
+                    "url": references[0]["url"] if references else "",
+                },
             )
         ]
 

@@ -3,10 +3,23 @@ from datetime import datetime
 from typing import Any
 
 from src.config import Settings
-from src.models import NewsItem, StockSnapshot
+from src.models import AnalystGrade, NewsItem, StockSnapshot
 from src.utils.http import HttpClient
 
 logger = logging.getLogger(__name__)
+
+TOP_ANALYST_FIRMS = (
+    "goldman sachs", "morgan stanley", "jpmorgan", "jp morgan", "citigroup", "citi",
+    "bank of america", "b of a securities", "barclays", "ubs", "deutsche bank",
+    "wells fargo", "rbc capital", "jefferies", "bernstein", "needham", "mizuho",
+    "hsbc", "evercore", "bmo capital", "truist", "keybanc", "wedbush", "piper sandler",
+    "stifel", "cowen", "raymond james", "credit suisse", "nomura",
+)
+
+
+def _is_top_analyst_firm(company: str) -> bool:
+    name = company.lower()
+    return any(firm in name for firm in TOP_ANALYST_FIRMS)
 
 
 class FMPClient:
@@ -81,21 +94,43 @@ class FMPClient:
             )
         return items
 
+    def get_grades(self, symbol: str, limit: int = 30) -> list[AnalystGrade]:
+        data = self.http.get("/grades", params=self._params({"symbol": symbol.upper()}))
+        grades: list[AnalystGrade] = []
+        for row in (data or [])[:limit]:
+            company = row.get("gradingCompany", "")
+            grades.append(
+                AnalystGrade(
+                    symbol=row.get("symbol", symbol.upper()),
+                    grading_company=company,
+                    previous_grade=row.get("previousGrade", ""),
+                    new_grade=row.get("newGrade", ""),
+                    action=(row.get("action") or "").lower(),
+                    date=row.get("date", ""),
+                    is_top_firm=_is_top_analyst_firm(company),
+                )
+            )
+        return grades
+
     def get_stock_screener(
         self,
         market_cap_more_than: int = 300_000_000,
         volume_more_than: int = 500_000,
         limit: int = 50,
+        sector: str | None = None,
+        industry: str | None = None,
     ) -> list[dict[str, Any]]:
-        return self.http.get(
-            "/company-screener",
-            params=self._params({
-                "marketCapMoreThan": market_cap_more_than,
-                "volumeMoreThan": volume_more_than,
-                "isActivelyTrading": True,
-                "limit": limit,
-            }),
-        )
+        params: dict[str, Any] = {
+            "marketCapMoreThan": market_cap_more_than,
+            "volumeMoreThan": volume_more_than,
+            "isActivelyTrading": True,
+            "limit": limit,
+        }
+        if sector:
+            params["sector"] = sector
+        if industry:
+            params["industry"] = industry
+        return self.http.get("/company-screener", params=self._params(params))
 
     def _parse_movers(self, data: list[dict], source: str) -> list[StockSnapshot]:
         results: list[StockSnapshot] = []

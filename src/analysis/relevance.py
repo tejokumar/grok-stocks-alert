@@ -16,6 +16,19 @@ COMPANY_ALIASES: dict[str, list[str]] = {
     "NFLX": ["netflix", "nflx"],
     "PLTR": ["palantir", "pltr"],
     "SPCX": ["spacex", "spcx"],
+    "MU": ["micron", "mu"],
+    "AMD": ["amd", "advanced micro"],
+    "AVGO": ["broadcom", "avgo"],
+    "QCOM": ["qualcomm", "qcom"],
+    "MRVL": ["marvell", "mrvl"],
+    "LRCX": ["lam research", "lrcx"],
+    "AMAT": ["applied materials", "amat"],
+    "KLAC": ["kla", "klac"],
+    "ASML": ["asml"],
+    "TXN": ["texas instruments", "txn"],
+    "ADI": ["analog devices", "adi"],
+    "GFS": ["globalfoundries", "gfs"],
+    "SMCI": ["super micro", "smci"],
 }
 
 OTHER_COMPANY_MARKERS = [

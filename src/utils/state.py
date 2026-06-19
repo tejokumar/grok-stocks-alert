@@ -20,6 +20,7 @@ class AgentState:
                 "daily_alerts": {},
                 "trending_watchlist": [],
                 "symbol_baselines": {},
+                "symbol_theses": {},
                 "last_scan": None,
             }
         try:
@@ -85,3 +86,33 @@ class AgentState:
 
     def already_alerted_today(self, symbol: str, trading_date: str) -> bool:
         return symbol in self.get_daily_alerted_symbols(trading_date)
+
+    def get_thesis(self, symbol: str) -> dict[str, Any] | None:
+        return self._data.setdefault("symbol_theses", {}).get(symbol.upper())
+
+    def set_bullish_thesis(self, symbol: str, thesis: dict[str, Any]) -> None:
+        theses = self._data.setdefault("symbol_theses", {})
+        theses[symbol.upper()] = {
+            **thesis,
+            "direction": "bullish",
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        self.save()
+
+    def mark_thesis_reversed(self, symbol: str, reversal: dict[str, Any]) -> None:
+        theses = self._data.setdefault("symbol_theses", {})
+        prior = theses.get(symbol.upper(), {})
+        theses[symbol.upper()] = {
+            **prior,
+            "direction": "bearish",
+            "reversal": reversal,
+            "reversed_at": datetime.utcnow().isoformat(),
+        }
+        self.save()
+
+    def list_bullish_theses(self) -> dict[str, dict[str, Any]]:
+        theses = self._data.get("symbol_theses", {})
+        return {
+            sym: data for sym, data in theses.items()
+            if data.get("direction") == "bullish"
+        }
