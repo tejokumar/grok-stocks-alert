@@ -45,7 +45,7 @@ Scoped exclusively to the semiconductor ecosystem — CPU, GPU, memory, networki
 | **Thesis reversals** | Alerts when a prior bullish thesis is contradicted by downgrades or bearish news |
 | **Reference links** | Every catalyst alert includes clickable source URLs in Telegram |
 | **Price targets** | Current price + 2–4 week target on every catalyst alert |
-| **xAI catalyst search** | Grok searches news/social for additional catalysts |
+| **xAI catalyst search** | Grok 4.3 with web + X search tools (Responses API) |
 | **Claude validation** | Filters low-quality high-conviction picks |
 | **Deduplication** | Headline normalization, per-symbol cooldown, 1 alert/symbol/scan |
 | **Force mode** | `--force` flag runs one scan immediately, ignoring market hours |
@@ -80,7 +80,12 @@ When a catalyst alert also has a recent analyst upgrade, the label becomes **CAT
    - Top-analyst **downgrades**
    - Bearish news (guidance cut, earnings miss, downgrade headlines, etc.)
 4. When detected → **THESIS REVERSAL** alert showing the original thesis vs. the new bearish signal
-5. Thesis is then marked bearish to prevent repeat alerts
+5. Thesis is then marked bearish (no repeat reversals until a new bullish thesis is recorded)
+6. After the per-symbol cooldown expires, the ticker can receive a **new bullish catalyst** — that re-arms reversal tracking
+
+### Price targets (2–4 week)
+
+Targets on catalyst alerts are **not** AI predictions. They use a rules-based formula from Polygon 20-day range + intraday momentum, capped between **+4%** and **+22%**. Thesis reversals use a fixed **−8%** revised target.
 
 ---
 
@@ -134,73 +139,99 @@ python run_semi.py &
 
 ## Mac mini install (semiconductor agent)
 
-Use the one-command installer to clone, set up, and register a LaunchAgent for auto-start on login.
+Default install path: `~/projects/grok-stocks-alert`
 
-### One-line install (recommended — new URL avoids CDN cache)
+### One-line setup (clone + deps, no launchd)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tejokumar/grok-stocks-alert/main/mac-mini-setup.sh | bash
 ```
 
-You should see `4.0.0-uv` in the first line of output. If you see `Python 3.11+ required`, your Mac is running a **cached old installer** — use the command above or the inline setup below.
+You should see `4.0.0-uv` in the first line. If you see `Python 3.11+ required`, use `mac-mini-setup.sh` (not a cached old installer URL).
 
-### Inline setup (no script download — paste into Terminal)
-
-```bash
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
-export PATH="$HOME/.local/bin:$PATH"
-D=~/projects/grok-stocks-alert
-mkdir -p "$(dirname "$D")"
-[ -d "$D/.git" ] && git -C "$D" pull --ff-only origin main || git clone https://github.com/tejokumar/grok-stocks-alert.git "$D"
-cd "$D" && uv python install 3.12 && uv sync
-[ -f .env ] || cp .env.example .env
-printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' 'cd "$(dirname "$0")"' 'export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"' 'uv run python run_semi.py --force' > test-semi-agent.sh
-chmod +x test-semi-agent.sh
-echo "OK — add keys: nano $D/.env  then run: $D/test-semi-agent.sh"
-```
-
-### Full install (LaunchAgent + start scripts)
+### Full install (clone + deps + LaunchAgent)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tejokumar/grok-stocks-alert/main/install-semi-agent.sh | bash
 ```
 
-### What the installer does
+### Mac mini helper scripts
 
-1. Clones the repo to `~/projects/grok-stocks-alert` (or `INSTALL_DIR`)
-2. Installs [uv](https://github.com/astral-sh/uv) if missing
-3. Installs Python 3.12 via `uv python install` (no Homebrew Python required)
-4. Runs `uv sync` to create `.venv` and install locked dependencies
-4. Copies `.env.example` → `.env`
-5. Creates `data/`, `logs/`, and empty `semi_state.json`
-6. Writes `start-semi-agent.sh` and `test-semi-agent.sh`
-7. Registers a **LaunchAgent** (`com.tejokumar.grok-semi-alerts`) for auto-start on login
-
-### After install on Mac mini
+All scripts live in the repo root. After `git pull`, make them executable once:
 
 ```bash
-# 1. Add API keys
-nano ~/projects/grok-stocks-alert/.env
-
-# 2. Test one scan immediately
-~/projects/grok-stocks-alert/test-semi-agent.sh
-
-# 3. Run during market hours (waits until 9:15 AM ET)
-~/projects/grok-stocks-alert/start-semi-agent.sh
+cd ~/projects/grok-stocks-alert
+chmod +x start-semi-agent.sh test-semi-agent.sh clear-semi-cache.sh \
+  install-semi-launchagent.sh uninstall-semi-launchagent.sh
 ```
 
-### LaunchAgent controls
+| Script | Purpose |
+|--------|---------|
+| `start-semi-agent.sh` | Run **live** agent during market hours |
+| `test-semi-agent.sh` | One force scan using **isolated test state** |
+| `clear-semi-cache.sh` | Reset **test-only** cooldowns/theses (live untouched) |
+| `install-semi-launchagent.sh` | Install or reload LaunchAgent (launchd) |
+| `uninstall-semi-launchagent.sh` | Fully remove LaunchAgent + stop orphan processes |
+
+### Test vs live state (important)
+
+| | Test (`test-semi-agent.sh`) | Live (`start-semi-agent.sh` / LaunchAgent) |
+|--|--|--|
+| State file | `data/test/semi_state.json` | `data/semi_state.json` |
+| Cache dir | `data/test/cache/` | `data/cache/` |
+
+`clear-semi-cache.sh` only clears the **test** paths. Production cooldowns and theses are never modified.
+
+### Typical Mac mini workflow
 
 ```bash
-# Restart agent
+cd ~/projects/grok-stocks-alert
+git pull
+
+# 1. Configure API keys (once)
+nano .env
+
+# 2. Test without affecting live agent
+./clear-semi-cache.sh
+./test-semi-agent.sh
+
+# 3. Enable auto-start on login
+./install-semi-launchagent.sh
+```
+
+### LaunchAgent install / uninstall
+
+```bash
+# Install or reload (writes plist + loads launchd)
+./install-semi-launchagent.sh
+
+# Full remove: bootout, delete plist, kill orphan processes
+./uninstall-semi-launchagent.sh
+
+# Also delete launchd stdout/stderr logs
+./uninstall-semi-launchagent.sh --purge-logs
+```
+
+Plist location: `~/Library/LaunchAgents/com.tejokumar.grok-semi-alerts.plist`
+
+```bash
+# Restart running agent
 launchctl kickstart -k gui/$(id -u)/com.tejokumar.grok-semi-alerts
 
-# Stop agent
-launchctl bootout gui/$(id -u)/com.tejokumar.grok-semi-alerts
+# Check launchd status
+launchctl print gui/$(id -u)/com.tejokumar.grok-semi-alerts
+```
 
-# Start again
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tejokumar.grok-semi-alerts.plist
+`uninstall-semi-launchagent.sh` does **not** delete `.env`, `data/semi_state.json`, or the repo.
+
+### git pull conflict (old local scripts)
+
+If `git pull` fails because `test-semi-agent.sh` already exists locally:
+
+```bash
+rm -f test-semi-agent.sh clear-semi-cache.sh
+git pull
+chmod +x *.sh
 ```
 
 ### Install options
@@ -209,7 +240,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tejokumar.grok-semi-
 # Custom install path
 INSTALL_DIR=~/other/path/grok-stocks-alert ./install-semi-agent.sh
 
-# Skip auto-start on login (manual run only)
+# Skip LaunchAgent during full install (set up later with install-semi-launchagent.sh)
 INSTALL_LAUNCH_AGENT=no ./install-semi-agent.sh
 ```
 
@@ -217,11 +248,11 @@ INSTALL_LAUNCH_AGENT=no ./install-semi-agent.sh
 
 | File | Purpose |
 |------|---------|
-| `~/projects/grok-stocks-alert/logs/semi_agent.log` | Agent scan logs |
-| `~/projects/grok-stocks-alert/logs/launchd.stdout.log` | LaunchAgent stdout |
-| `~/projects/grok-stocks-alert/logs/launchd.stderr.log` | LaunchAgent errors |
+| `logs/semi_agent.log` | Agent scan logs |
+| `logs/launchd.stdout.log` | LaunchAgent stdout |
+| `logs/launchd.stderr.log` | LaunchAgent stderr |
 
-Copy your `.env` from another machine to the Mac mini before testing — the installer does not include API keys.
+Copy your `.env` from another machine before testing — installers do not include API keys.
 
 ---
 
@@ -262,6 +293,10 @@ MIN_VOLUME=100000
 ENABLE_XAI_CATALYST_SEARCH=true
 ENABLE_CLAUDE_VALIDATION=true
 ENABLE_ANALYST_GRADES=true
+XAI_MODEL=grok-4.3
+XAI_REASONING_EFFORT=none
+XAI_MAX_SYMBOLS=6
+XAI_MAX_WORKERS=4
 ANALYST_GRADE_LOOKBACK_DAYS=14
 THESIS_REVERSAL_LOOKBACK_DAYS=7
 
@@ -280,7 +315,15 @@ MARKET_CLOSE_MINUTE=0
 ```
 run.py                          # General agent entry
 run_semi.py                     # Semiconductor agent entry
-install-semi-agent.sh           # Mac mini one-command installer
+
+# Mac mini / ops scripts
+install-semi-agent.sh           # Full install (clone, uv, LaunchAgent)
+mac-mini-setup.sh               # Clone + uv only (no launchd)
+start-semi-agent.sh               # Run live semi agent
+test-semi-agent.sh               # Force scan (test state only)
+clear-semi-cache.sh             # Reset test state/cache
+install-semi-launchagent.sh     # Install/reload LaunchAgent
+uninstall-semi-launchagent.sh   # Remove LaunchAgent completely
 
 src/
 ├── main.py                     # General agent scheduler
@@ -307,7 +350,7 @@ src/
 │   ├── fmp_client.py           # Stable API + grades
 │   └── roic_client.py          # v2 endpoints
 ├── ai/
-│   ├── xai_client.py           # Grok catalyst search
+│   ├── xai_client.py           # Grok 4.3 Responses API + web/X search
 │   └── claude_client.py        # Alert validation
 ├── alerts/telegram.py          # Telegram delivery with reference links
 ├── market/calendar.py          # US market hours
@@ -316,8 +359,11 @@ src/
     └── dedup.py                # Headline normalization
 
 data/
-├── state.json                  # General agent state
-└── semi_state.json             # Semi agent state
+├── state.json                  # General agent state (live)
+├── semi_state.json             # Semi agent state (live)
+└── test/
+    ├── semi_state.json         # Test-only state (test-semi-agent.sh)
+    └── cache/                  # Test-only cache
 ```
 
 ---
@@ -338,7 +384,7 @@ Running both agents on a trading day (9:15 AM–4:00 PM ET, 10-min interval):
 | Category | Est. daily | Est. monthly (22 trading days) |
 |----------|------------|-------------------------------|
 | Subscriptions (Polygon, FMP, ROIC) | ~$6–10/day amortized | ~$120–240/month |
-| xAI (grok-3-fast + live search) | ~$3–15/day | ~$65–330/month |
+| xAI (grok-4.3 + web/X search) | ~$3–15/day | ~$65–330/month |
 | Claude (conviction validation) | ~$0–2/day | ~$0–40/month |
 | Telegram | $0 | $0 |
 | **Total** | **~$10–20/day** | **~$250–400/month** |
