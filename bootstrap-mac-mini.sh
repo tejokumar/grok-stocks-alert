@@ -50,13 +50,6 @@ if [[ ! -f .env ]]; then
 fi
 
 mkdir -p data logs
-cat > start-semi-agent.sh <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-cd "$(dirname "$0")"
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-exec uv run python run_semi.py "$@"
-EOF
 chmod +x start-semi-agent.sh test-semi-agent.sh clear-semi-cache.sh install-semi-launchagent.sh uninstall-semi-launchagent.sh
 
 echo ""

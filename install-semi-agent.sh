@@ -147,78 +147,23 @@ JSON
   fi
 }
 
-write_start_script() {
-  log "Writing start script: $INSTALL_DIR/start-semi-agent.sh"
-  cat > "$INSTALL_DIR/start-semi-agent.sh" <<'SCRIPT'
-#!/usr/bin/env bash
-set -euo pipefail
-cd "$(dirname "$0")"
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-exec uv run python run_semi.py "$@"
-SCRIPT
-  chmod +x "$INSTALL_DIR/start-semi-agent.sh"
+write_helper_scripts() {
+  log "Enabling helper scripts"
+  chmod +x \
+    "$INSTALL_DIR/start-semi-agent.sh" \
+    "$INSTALL_DIR/test-semi-agent.sh" \
+    "$INSTALL_DIR/clear-semi-cache.sh" \
+    "$INSTALL_DIR/install-semi-launchagent.sh" \
+    "$INSTALL_DIR/uninstall-semi-launchagent.sh"
 }
 
-write_test_script() {
-  log "Enabling test script: $INSTALL_DIR/test-semi-agent.sh"
-  chmod +x "$INSTALL_DIR/test-semi-agent.sh"
-}
 
-write_clear_cache_script() {
-  log "Enabling cache reset script: $INSTALL_DIR/clear-semi-cache.sh"
-  chmod +x "$INSTALL_DIR/clear-semi-cache.sh"
-}
-
-write_launchagent_scripts() {
-  log "Enabling launchd scripts"
-  chmod +x "$INSTALL_DIR/install-semi-launchagent.sh" "$INSTALL_DIR/uninstall-semi-launchagent.sh"
-}
 
 install_launch_agent() {
   [[ "$INSTALL_LAUNCH_AGENT" == "yes" ]] || { log "Skipping launch agent (INSTALL_LAUNCH_AGENT=$INSTALL_LAUNCH_AGENT)"; return; }
 
-  local plist_label="com.tejokumar.grok-semi-alerts"
-  local plist_path="$HOME/Library/LaunchAgents/${plist_label}.plist"
-  local log_out="$INSTALL_DIR/logs/launchd.stdout.log"
-  local log_err="$INSTALL_DIR/logs/launchd.stderr.log"
-
-  log "Installing LaunchAgent for auto-start on login: $plist_path"
-  mkdir -p "$HOME/Library/LaunchAgents" "$INSTALL_DIR/logs"
-
-  cat > "$plist_path" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>${plist_label}</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>${INSTALL_DIR}/start-semi-agent.sh</string>
-  </array>
-  <key>WorkingDirectory</key>
-  <string>${INSTALL_DIR}</string>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <true/>
-  <key>StandardOutPath</key>
-  <string>${log_out}</string>
-  <key>StandardErrorPath</key>
-  <string>${log_err}</string>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>PATH</key>
-    <string>${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-  </dict>
-</dict>
-</plist>
-PLIST
-
-  launchctl bootout "gui/$(id -u)/${plist_label}" 2>/dev/null || true
-  launchctl bootstrap "gui/$(id -u)" "$plist_path"
-  launchctl enable "gui/$(id -u)/${plist_label}"
-  log "LaunchAgent loaded. Agent starts on login and restarts if it crashes."
+  log "Installing LaunchAgent via install-semi-launchagent.sh"
+  INSTALL_DIR="$INSTALL_DIR" "$INSTALL_DIR/install-semi-launchagent.sh"
 }
 
 print_next_steps() {
@@ -255,7 +200,7 @@ NEXT STEPS (on your Mac mini):
 
 4) Logs:
    $INSTALL_DIR/logs/semi_agent.log
-   $INSTALL_DIR/logs/launchd.stdout.log
+   ~/Library/Logs/com.tejokumar.grok-semi-alerts/stdout.log
 
 LaunchAgent controls:
    $INSTALL_DIR/install-semi-launchagent.sh                              # install/reload
@@ -277,10 +222,7 @@ main() {
   setup_project
   setup_env_file
   setup_directories
-  write_start_script
-  write_test_script
-  write_clear_cache_script
-  write_launchagent_scripts
+  write_helper_scripts
   install_launch_agent
   print_next_steps
 }

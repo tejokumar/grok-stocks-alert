@@ -214,6 +214,8 @@ nano .env
 
 Plist location: `~/Library/LaunchAgents/com.tejokumar.grok-semi-alerts.plist`
 
+Run install/uninstall **on the Mac mini only** (logged-in GUI session). If `launchctl bootstrap` fails with I/O error, the install script automatically falls back to `launchctl load`.
+
 ```bash
 # Restart running agent
 launchctl kickstart -k gui/$(id -u)/com.tejokumar.grok-semi-alerts
@@ -249,8 +251,8 @@ INSTALL_LAUNCH_AGENT=no ./install-semi-agent.sh
 | File | Purpose |
 |------|---------|
 | `logs/semi_agent.log` | Agent scan logs |
-| `logs/launchd.stdout.log` | LaunchAgent stdout |
-| `logs/launchd.stderr.log` | LaunchAgent stderr |
+| `~/Library/Logs/com.tejokumar.grok-semi-alerts/stdout.log` | LaunchAgent stdout |
+| `~/Library/Logs/com.tejokumar.grok-semi-alerts/stderr.log` | LaunchAgent stderr |
 
 Copy your `.env` from another machine before testing — installers do not include API keys.
 

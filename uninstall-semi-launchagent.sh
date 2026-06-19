@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Fully remove the semi agent LaunchAgent (launchd) on macOS.
+# Intended for Mac mini / production host.
 # Stops the service, unloads it, deletes plist, and stops orphan processes.
 # Does NOT delete .env, live state, or the repo.
 #
@@ -15,9 +16,13 @@ set -euo pipefail
 INSTALL_DIR="${INSTALL_DIR:-$HOME/projects/grok-stocks-alert}"
 PLIST_LABEL="com.tejokumar.grok-semi-alerts"
 PLIST_PATH="$HOME/Library/LaunchAgents/${PLIST_LABEL}.plist"
-GUI_TARGET="gui/$(id -u)/${PLIST_LABEL}"
-LOG_OUT="${INSTALL_DIR}/logs/launchd.stdout.log"
-LOG_ERR="${INSTALL_DIR}/logs/launchd.stderr.log"
+LOG_DIR="${HOME}/Library/Logs/${PLIST_LABEL}"
+LOG_OUT="${LOG_DIR}/stdout.log"
+LOG_ERR="${LOG_DIR}/stderr.log"
+LEGACY_LOG_OUT="${INSTALL_DIR}/logs/launchd.stdout.log"
+LEGACY_LOG_ERR="${INSTALL_DIR}/logs/launchd.stderr.log"
+GUI_DOMAIN="gui/$(id -u)"
+GUI_TARGET="${GUI_DOMAIN}/${PLIST_LABEL}"
 PURGE_LOGS=false
 
 if [[ "${1:-}" == "--purge-logs" ]]; then
@@ -30,13 +35,10 @@ printf 'Uninstalling semi agent LaunchAgent...\n'
 printf '  label: %s\n' "$PLIST_LABEL"
 printf '  install dir: %s\n\n' "$INSTALL_DIR"
 
-# 1) Stop and unload from launchd (modern + legacy domains)
-if launchctl print "$GUI_TARGET" >/dev/null 2>&1; then
-  launchctl bootout "gui/$(id -u)" "$PLIST_PATH" 2>/dev/null \
-    || launchctl bootout "$GUI_TARGET" 2>/dev/null \
-    || true
-fi
-
+# 1) Stop and unload (bootstrap + legacy load)
+launchctl bootout "$GUI_DOMAIN" "$PLIST_PATH" 2>/dev/null || true
+launchctl bootout "$GUI_TARGET" 2>/dev/null || true
+launchctl unload "$PLIST_PATH" 2>/dev/null || true
 launchctl disable "$GUI_TARGET" 2>/dev/null || true
 launchctl remove "$PLIST_LABEL" 2>/dev/null || true
 
@@ -72,10 +74,13 @@ stop_orphans
 
 # 4) Optional: remove launchd stdout/stderr logs
 if [[ "$PURGE_LOGS" == true ]]; then
-  rm -f "$LOG_OUT" "$LOG_ERR"
+  rm -f "$LOG_OUT" "$LOG_ERR" "$LEGACY_LOG_OUT" "$LEGACY_LOG_ERR"
+  rmdir "$LOG_DIR" 2>/dev/null || true
   printf 'Removed launchd logs:\n'
   printf '  - %s\n' "$LOG_OUT"
   printf '  - %s\n' "$LOG_ERR"
+  printf '  - %s\n' "$LEGACY_LOG_OUT"
+  printf '  - %s\n' "$LEGACY_LOG_ERR"
 else
   printf 'Kept launchd logs (pass --purge-logs to delete):\n'
   printf '  - %s\n' "$LOG_OUT"
@@ -85,7 +90,8 @@ fi
 # 5) Verify unload
 if launchctl print "$GUI_TARGET" >/dev/null 2>&1; then
   printf '\nWARNING: LaunchAgent still loaded. Try:\n'
-  printf '  launchctl bootout gui/$(id -u) %s\n' "$PLIST_PATH"
+  printf '  launchctl bootout %s %s\n' "$GUI_DOMAIN" "$PLIST_PATH"
+  printf '  launchctl unload %s\n' "$PLIST_PATH"
   exit 1
 fi
 
@@ -98,5 +104,5 @@ printf '\nLaunchAgent fully removed.\n'
 printf 'Live agent data untouched:\n'
 printf '  - %s/.env\n' "$INSTALL_DIR"
 printf '  - %s/data/semi_state.json\n' "$INSTALL_DIR"
-printf '\nRe-install later:\n'
+printf '\nRe-install later (on Mac mini):\n'
 printf '  %s/install-semi-launchagent.sh\n' "$INSTALL_DIR"
