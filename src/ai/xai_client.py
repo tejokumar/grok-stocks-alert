@@ -8,7 +8,7 @@ from src.utils.http import HttpClient
 
 logger = logging.getLogger(__name__)
 
-CATALYST_PROMPT = """You are a stock market catalyst analyst with access to real-time social chatter and news.
+CATALYST_PROMPT = """You are a stock market catalyst analyst with access to real-time web and X/Twitter search.
 
 Analyze {symbol} for potential catalysts that could move the stock significantly UP over the next few trading sessions.
 
@@ -39,7 +39,7 @@ If no meaningful catalysts found, return confidence below 0.4 and explain why.""
 class XAIClient:
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.http = HttpClient(settings.xai_base_url)
+        self.http = HttpClient(settings.xai_base_url, timeout=180.0)
 
     def analyze_catalysts(self, symbol: str, context: str = "") -> CatalystInsight | None:
         if not self.settings.xai_api_key or not self.settings.enable_xai_catalyst_search:
@@ -51,29 +51,41 @@ class XAIClient:
 
         try:
             response = self.http.post(
-                "/chat/completions",
+                "/responses",
                 json={
                     "model": self.settings.xai_model,
-                    "messages": [
-                        {"role": "system", "content": "You are a financial catalyst research agent. Use live search when available."},
+                    "include": ["no_inline_citations"],
+                    "reasoning": {"effort": self.settings.xai_reasoning_effort},
+                    "input": [
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a financial catalyst research agent. "
+                                "Use web_search and x_search tools to find current news and social chatter."
+                            ),
+                        },
                         {"role": "user", "content": prompt},
                     ],
-                    "temperature": 0.3,
-                    "search_parameters": {"mode": "auto"},
+                    "tools": [
+                        {"type": "web_search"},
+                        {"type": "x_search"},
+                    ],
                 },
                 headers={
                     "Authorization": f"Bearer {self.settings.xai_api_key}",
                     "Content-Type": "application/json",
                 },
             )
-            content = response["choices"][0]["message"]["content"]
+            content = self._extract_output_text(response)
+            if not content:
+                logger.warning("xAI returned empty response for %s", symbol)
+                return None
+
             parsed = self._parse_json(content)
             if not parsed:
                 return None
-            references = [
-                ref for ref in (parsed.get("references") or [])
-                if isinstance(ref, dict) and ref.get("url")
-            ]
+
+            references = self._build_references(parsed, response.get("citations") or [])
             return CatalystInsight(
                 symbol=symbol,
                 catalysts=parsed.get("catalysts", []),
@@ -124,6 +136,61 @@ class XAIClient:
                 },
             )
         ]
+
+    def _extract_output_text(self, response: dict) -> str:
+        parts: list[str] = []
+        for item in response.get("output") or []:
+            if item.get("type") != "message":
+                continue
+            for content in item.get("content") or []:
+                if content.get("type") == "output_text":
+                    text = (content.get("text") or "").strip()
+                    if text:
+                        parts.append(text)
+        return "\n".join(parts).strip()
+
+    def _build_references(self, parsed: dict, citations: list) -> list[dict[str, str]]:
+        references: list[dict[str, str]] = []
+        seen_urls: set[str] = set()
+
+        for ref in parsed.get("references") or []:
+            if not isinstance(ref, dict):
+                continue
+            url = (ref.get("url") or "").strip()
+            if not url or url in seen_urls:
+                continue
+            seen_urls.add(url)
+            references.append(
+                {
+                    "title": (ref.get("title") or "Source")[:100],
+                    "url": url,
+                    "source": ref.get("source") or "xai",
+                }
+            )
+
+        for url in citations:
+            if not isinstance(url, str):
+                continue
+            url = url.strip()
+            if not url or url in seen_urls:
+                continue
+            seen_urls.add(url)
+            references.append(
+                {
+                    "title": self._citation_title(url),
+                    "url": url,
+                    "source": "xai",
+                }
+            )
+
+        return references[:8]
+
+    @staticmethod
+    def _citation_title(url: str) -> str:
+        if "x.com/" in url or "twitter.com/" in url:
+            return "X post"
+        host = url.split("/")[2] if "://" in url else url
+        return host[:100]
 
     def _parse_json(self, text: str) -> dict | None:
         try:

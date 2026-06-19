@@ -43,7 +43,8 @@ class Settings(BaseSettings):
     enable_analyst_grades: bool = True
     analyst_grade_lookback_days: int = 14
     thesis_reversal_lookback_days: int = 7
-    xai_model: str = "grok-3-fast"
+    xai_model: str = "grok-4.3"
+    xai_reasoning_effort: str = "none"
     claude_model: str = "claude-sonnet-4-20250514"
 
     market_timezone: str = "America/New_York"
