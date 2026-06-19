@@ -1,9 +1,14 @@
 import logging
-from datetime import datetime
 
 from src.ai import ClaudeClient, XAIClient
 from src.alerts import TelegramAlerter
-from src.analysis import BreakoutAnalyzer, CatalystAnalyzer, DirectionAnalyzer, TrendingAnalyzer
+from src.analysis import (
+    BreakoutAnalyzer,
+    CatalystAnalyzer,
+    ConvictionSelector,
+    DirectionAnalyzer,
+    TrendingAnalyzer,
+)
 from src.config import Settings
 from src.data import FMPClient, PolygonClient, ROICClient
 from src.market import MarketCalendar
@@ -30,6 +35,7 @@ class StockAlertAgent:
         self.breakout = BreakoutAnalyzer(self.settings, self.polygon)
         self.direction = DirectionAnalyzer(self.state)
         self.catalyst = CatalystAnalyzer(self.settings, self.polygon, self.fmp, self.roic)
+        self.conviction = ConvictionSelector(self.settings, self.polygon, self.fmp)
 
     def run_scan(self, force: bool = False) -> None:
         now = self.calendar.now()
@@ -37,72 +43,48 @@ class StockAlertAgent:
             logger.info("Outside agent window — skipping scan")
             return
 
+        trading_date = now.strftime("%Y-%m-%d")
+        slots = self.state.remaining_daily_slots(trading_date, self.settings.max_daily_alerts)
+        if slots <= 0:
+            logger.info("Daily alert limit reached (%d) — skipping scan", self.settings.max_daily_alerts)
+            return
+
         if force:
             phase = "regular"
             logger.info("Force mode — ignoring market hours")
         else:
             phase = "premarket" if self.calendar.is_premarket_window(now) else "regular"
-        logger.info("Starting %s scan at %s", phase, now.isoformat())
+        logger.info("Starting %s scan at %s (%d daily slots left)", phase, now.isoformat(), slots)
 
         watchlist = self.trending.discover_trending()
-        symbols = [s.symbol for s in watchlist]
+        focus = watchlist[: self.settings.max_analysis_symbols]
+        symbols = [s.symbol for s in focus]
         self.state.update_watchlist(symbols)
-        logger.info("Watchlist: %d symbols — %s", len(symbols), ", ".join(symbols[:10]))
+        logger.info("Focus list: %d symbols — %s", len(symbols), ", ".join(symbols[:8]))
 
-        alerts: list[Alert] = []
+        candidates: list[Alert] = []
+        candidates.extend(self.breakout.detect_breakouts(focus))
+        candidates.extend(self.direction.detect_direction_changes(focus))
+        candidates.extend(self.catalyst.find_catalyst_alerts(symbols))
+        candidates.extend(self.catalyst.find_upside_candidates(symbols))
+        candidates.extend(self._xai_catalyst_alerts(symbols[:6]))
 
-        if phase == "premarket":
-            alerts.extend(self._premarket_alerts(watchlist))
+        logger.info("Raw candidate signals: %d", len(candidates))
 
-        alerts.extend(self.breakout.detect_breakouts(watchlist))
-        alerts.extend(self.direction.detect_direction_changes(watchlist))
-        alerts.extend(self.catalyst.find_catalyst_alerts(symbols))
+        top_picks = self.conviction.select_top_picks(candidates, focus, slots_available=slots)
+        logger.info("High conviction picks: %d", len(top_picks))
 
-        if phase == "premarket" or len(alerts) < 3:
-            alerts.extend(self.catalyst.find_upside_candidates(symbols))
-
-        alerts.extend(self._xai_catalyst_alerts(symbols[:8]))
-
-        self._dispatch_alerts(alerts)
+        self._dispatch_alerts(top_picks, trading_date)
         self.state.set_last_scan()
 
-    def _premarket_alerts(self, watchlist: list) -> list[Alert]:
-        alerts: list[Alert] = []
-        for snap in watchlist[:15]:
-            if snap.change_pct >= 3.0:
-                alerts.append(
-                    Alert(
-                        alert_type=AlertType.PREMARKET,
-                        symbol=snap.symbol,
-                        title="Pre-market momentum leader",
-                        message=(
-                            f"{snap.symbol} is up {snap.change_pct:+.1f}% pre-market "
-                            f"at ${snap.price:.2f}. Volume: {snap.volume:,}. "
-                            "Watch for continuation or fade at the open."
-                        ),
-                        confidence=min(0.85, 0.5 + snap.change_pct / 20),
-                    )
-                )
-        if watchlist:
-            top = watchlist[0]
-            alerts.append(
-                Alert(
-                    alert_type=AlertType.TRENDING,
-                    symbol="MARKET",
-                    title="Pre-market trending scan complete",
-                    message=(
-                        f"Top mover: {top.symbol} ({top.change_pct:+.1f}%). "
-                        f"Tracking {len(watchlist)} symbols today: "
-                        f"{', '.join(s.symbol for s in watchlist[:8])}."
-                    ),
-                    confidence=0.8,
-                )
-            )
-        return alerts
-
     def _xai_catalyst_alerts(self, symbols: list[str]) -> list[Alert]:
+        if not self.settings.enable_xai_catalyst_search:
+            return []
+
         alerts: list[Alert] = []
         for symbol in symbols:
+            if self.state.already_alerted_today(symbol, self.calendar.now().strftime("%Y-%m-%d")):
+                continue
             context_parts = []
             try:
                 news = self.polygon.get_news(symbol, limit=3)
@@ -114,16 +96,14 @@ class StockAlertAgent:
                 alerts.extend(self.xai.to_alerts(insight))
         return alerts
 
-    def _dispatch_alerts(self, alerts: list[Alert]) -> None:
-        seen: set[str] = set()
+    def _dispatch_alerts(self, alerts: list[Alert], trading_date: str) -> None:
         for alert in alerts:
-            dedupe_key = f"{alert.alert_type.value}:{alert.symbol}:{alert.title[:40]}"
-            if dedupe_key in seen:
+            if self.state.already_alerted_today(alert.symbol, trading_date):
+                logger.info("Already alerted on %s today — skipping", alert.symbol)
                 continue
-            seen.add(dedupe_key)
 
-            state_key = f"{alert.alert_type.value}:{alert.symbol}"
-            if not self.state.should_send_alert(state_key, cooldown_minutes=45):
+            if alert.confidence < self.settings.min_alert_confidence:
+                logger.info("Below confidence threshold: %s (%.0f%%)", alert.symbol, alert.confidence * 100)
                 continue
 
             validated = self.claude.validate_alert(alert)
@@ -131,14 +111,21 @@ class StockAlertAgent:
                 continue
 
             if self.telegram.send(validated):
-                self.state.mark_alert_sent(state_key)
+                self.state.mark_daily_alert(alert.symbol, trading_date)
+                self.state.mark_alert_sent(f"conviction:{alert.symbol}")
+                logger.info(
+                    "Sent high conviction alert: %s @ $%.2f → $%.2f",
+                    alert.symbol,
+                    validated.metadata.get("current_price", 0),
+                    validated.metadata.get("price_target", 0),
+                )
 
     def send_startup_message(self) -> None:
         now = self.calendar.now()
         self.telegram.send_text(
             f"Agent started at {now.strftime('%Y-%m-%d %H:%M %Z')}. "
-            f"Pre-market analysis begins {self.settings.premarket_start_minutes_before_open} min before open. "
-            f"Scan interval: {self.settings.scan_interval_minutes} min."
+            f"Max {self.settings.max_daily_alerts} high-conviction alerts per day. "
+            f"Each alert includes current price and 2-4 week target."
         )
 
     def close(self) -> None:

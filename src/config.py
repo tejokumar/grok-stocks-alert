@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     breakout_volume_multiplier: float = 2.0
     breakout_price_pct: float = 3.0
     max_watchlist_size: int = 50
+    max_daily_alerts: int = 3
+    min_conviction_score: float = 0.58
+    min_alert_confidence: float = 0.68
+    min_conviction_price: float = 5.0
+    max_analysis_symbols: int = 20
     enable_xai_catalyst_search: bool = True
     enable_claude_validation: bool = True
     xai_model: str = "grok-3-fast"

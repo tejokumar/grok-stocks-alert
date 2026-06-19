@@ -17,6 +17,7 @@ class AgentState:
         if not self.path.exists():
             return {
                 "sent_alerts": {},
+                "daily_alerts": {},
                 "trending_watchlist": [],
                 "symbol_baselines": {},
                 "last_scan": None,
@@ -63,3 +64,24 @@ class AgentState:
     def set_last_scan(self) -> None:
         self._data["last_scan"] = datetime.utcnow().isoformat()
         self.save()
+
+    def get_daily_alert_count(self, trading_date: str) -> int:
+        daily = self._data.setdefault("daily_alerts", {})
+        return len(daily.get(trading_date, []))
+
+    def get_daily_alerted_symbols(self, trading_date: str) -> list[str]:
+        daily = self._data.setdefault("daily_alerts", {})
+        return list(daily.get(trading_date, []))
+
+    def remaining_daily_slots(self, trading_date: str, max_daily: int) -> int:
+        return max(0, max_daily - self.get_daily_alert_count(trading_date))
+
+    def mark_daily_alert(self, symbol: str, trading_date: str) -> None:
+        daily = self._data.setdefault("daily_alerts", {})
+        entries = daily.setdefault(trading_date, [])
+        if symbol not in entries:
+            entries.append(symbol)
+        self.save()
+
+    def already_alerted_today(self, symbol: str, trading_date: str) -> bool:
+        return symbol in self.get_daily_alerted_symbols(trading_date)

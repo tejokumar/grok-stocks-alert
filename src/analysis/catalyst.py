@@ -29,7 +29,7 @@ class CatalystAnalyzer:
 
     def find_catalyst_alerts(self, symbols: list[str]) -> list[Alert]:
         alerts: list[Alert] = []
-        for symbol in symbols[:15]:
+        for symbol in symbols[:10]:
             news = self._gather_news(symbol)
             roic_catalysts = self.roic.get_catalysts(symbol)
             scored = self._score_news(news)
@@ -45,7 +45,7 @@ class CatalystAnalyzer:
                         metadata={"url": top.url, "source": top.source},
                     )
                 )
-            for cat in roic_catalysts[:2]:
+            for cat in roic_catalysts[:1]:
                 title = cat.get("title") or cat.get("description", "ROIC catalyst")
                 alerts.append(
                     Alert(
@@ -62,7 +62,7 @@ class CatalystAnalyzer:
     def find_upside_candidates(self, symbols: list[str] | None = None) -> list[Alert]:
         alerts: list[Alert] = []
         candidates = self.roic.get_upside_candidates(symbols=symbols)
-        for row in candidates[:10]:
+        for row in candidates[:8]:
             symbol = row.get("symbol") or row.get("ticker")
             if not symbol:
                 continue

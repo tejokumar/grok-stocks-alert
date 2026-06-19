@@ -81,7 +81,7 @@ class XAIClient:
             return None
 
     def to_alerts(self, insight: CatalystInsight) -> list[Alert]:
-        if insight.confidence < 0.45 or insight.sentiment in ("bearish", "neutral"):
+        if insight.confidence < 0.60 or insight.sentiment in ("bearish", "neutral", "mixed"):
             return []
 
         catalyst_text = "\n".join(f"• {c}" for c in insight.catalysts[:5])

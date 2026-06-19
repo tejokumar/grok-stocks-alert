@@ -7,9 +7,12 @@ from src.models import Alert
 
 logger = logging.getLogger(__name__)
 
-VALIDATION_PROMPT = """You are a senior equity analyst validating automated stock alerts.
+VALIDATION_PROMPT = """You are a senior equity analyst selecting only the best 2-3 trades per day.
 
-Review this alert for {symbol} and decide if it should be sent to a trader.
+Review this high-conviction alert for {symbol}. The trader can only act on exceptional setups.
+
+Current price: ${current_price}
+Price target (2-4 weeks): ${price_target} ({target_pct:+.1f}%)
 
 Alert type: {alert_type}
 Title: {title}
@@ -22,7 +25,12 @@ Respond ONLY with valid JSON:
   "reason": "brief justification"
 }}
 
-Reject alerts that are vague, duplicate obvious market moves, or lack actionable catalysts."""
+Only approve (should_send: true) if:
+- Multiple converging signals OR a powerful single catalyst
+- Clear upside to the price target within 2-4 weeks
+- Liquid, tradeable stock (not penny stock hype)
+
+Reject penny-stock pumps, vague momentum, low-quality breakouts, and anything below 75% conviction."""
 
 
 class ClaudeClient:
@@ -40,11 +48,18 @@ class ClaudeClient:
         if not self.settings.anthropic_api_key or not self.settings.enable_claude_validation:
             return alert
 
+        current_price = alert.metadata.get("current_price", 0)
+        price_target = alert.metadata.get("price_target", 0)
+        target_pct = alert.metadata.get("target_pct", 0)
+
         prompt = VALIDATION_PROMPT.format(
             symbol=alert.symbol,
             alert_type=alert.alert_type.value,
             title=alert.title,
             message=alert.message,
+            current_price=current_price,
+            price_target=price_target,
+            target_pct=target_pct,
         )
 
         try:
@@ -59,7 +74,11 @@ class ClaudeClient:
             if not parsed or not parsed.get("should_send", True):
                 logger.info("Claude rejected alert for %s: %s", alert.symbol, parsed)
                 return None
-            alert.confidence = float(parsed.get("adjusted_confidence", alert.confidence))
+            adjusted = float(parsed.get("adjusted_confidence", alert.confidence))
+            alert.confidence = adjusted
+            if adjusted < 0.68:
+                logger.info("Claude confidence too low for %s: %.0f%%", alert.symbol, adjusted * 100)
+                return None
             return alert
         except Exception as exc:
             logger.warning("Claude validation failed for %s: %s", alert.symbol, exc)
