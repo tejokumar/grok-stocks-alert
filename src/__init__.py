@@ -1,0 +1,1 @@
+"""Grok Stock Alerts Agent — pre-market and intraday stock alerting."""
